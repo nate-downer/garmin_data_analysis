@@ -1,0 +1,32 @@
+# Data files
+*.csv
+*.gpx
+
+# Raw data directories
+raw_garmin_data/
+
+# Processed data directories
+data_pipeline/clean_data/
+data_pipeline/outputs/
+data_pipeline/models/
+
+# Validation/output maps
+scratch/validation_maps/
+
+# R files
+.Rhistory
+.RData
+.Rproj.user
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
