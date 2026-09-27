@@ -1,6 +1,9 @@
 # Data files
 *.csv
 *.gpx
+*.db
+*.sqlite
+*.sqlite3
 
 # Raw data directories
 raw_garmin_data/
@@ -30,3 +33,14 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Node/Frontend
+node_modules/
+dist/
+build/
+.env
+.env.local
+
+# Backend
+venv/
+*.pyc
