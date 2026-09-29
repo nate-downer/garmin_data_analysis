@@ -57,11 +57,15 @@ parse_gpx_file <- function(filepath) {
   }
 
   # Extract data from each point with full precision
+  # Elevation can be either an attribute or a child element, so try both
+  elev_attr <- as.double(xml_attr(trackpoints, "ele"))
+  elev_elem <- as.double(xml_text(xml_find_first(trackpoints, ".//d1:ele", ns)))
+
   points_data <- tibble(
     activity_id = activity_id,
     lat = as.double(xml_attr(trackpoints, "lat")),
     lon = as.double(xml_attr(trackpoints, "lon")),
-    elevation_m = as.double(xml_text(xml_find_first(trackpoints, ".//d1:ele", ns))),
+    elevation_m = if_else(is.na(elev_attr), elev_elem, elev_attr),
     elevation_ft = elevation_m * 3.28084
   )
 

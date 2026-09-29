@@ -24,6 +24,7 @@ library(leaflet)
 library(htmlwidgets)
 library(htmltools)
 library(plotly)
+library(shiny)
 
 # File parsing
 library(xml2)
@@ -39,7 +40,7 @@ validation_dir <- "data_pipeline/outputs"       # HTML report outputs
 models_dir <- "data_pipeline/models"                    # Saved models
 
 # Route to predict time for
-test_route <- "raw_garmin_data/test_routes/whitney_mountaineers_route"  
+test_route <- "raw_garmin_data/test_routes/greys_torreys_kelso_ridge"
 
 # Time prediction parameters
 prediciton_start_time_of_day_h <- 03  # 3 am
@@ -110,14 +111,22 @@ message("========================================\n")
 
 ## run scripts ----
 
+# Run Inital data Cleaning
 source("data_pipeline/01_load_gpx_data.R")
-source("data_pipeline/02_clean_noise_data.R")
-source("data_pipeline/03_distance_intervals.R")
-source("data_pipeline/04_visualize_clean_data.R")
-source("data_pipeline/05_comparative_analysis.R")
-source("data_pipeline/06_time_prediction_models.R")
-source("data_pipeline/07_predict_time.R")
+# source("data_pipeline/02_clean_noise_data.R")
+
+# Run Shinny App for Manual Cleaning
+shiny::runApp("manual_data_cleaning_app", launch.browser = TRUE)
+
+# Continue with rest of pipeline
+# source("data_pipeline/02b_apply_manual_overrides.R")
+# source("data_pipeline/03_distance_intervals.R")
+# source("data_pipeline/04_visualize_clean_data.R")
+# source("data_pipeline/05_comparative_analysis.R")
+# source("data_pipeline/06_time_prediction_models.R")
+# source("data_pipeline/07_predict_time.R")
 
 
 
 
+ 

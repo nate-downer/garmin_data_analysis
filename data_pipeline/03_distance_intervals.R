@@ -109,20 +109,35 @@ create_distance_intervals <- function(segments_data, interval_distance_mi) {
 
 ## main processing ----
 
-# Load denoised segments data from stage 2
-message("Loading denoised segments data from stage 2...")
-denoised_segments_data <- read.csv(file.path(clean_data_dir, "denoised_segments_data.csv"))
+# Load manually cleaned segments data from stage 02b
+message("Loading manually cleaned segments data from stage 02b...")
+long_segments_data <- read.csv(file.path(clean_data_dir, "manually_cleaned_segments_data.csv"), stringsAsFactors = FALSE)
 
-message(paste("  Loaded", format(nrow(denoised_segments_data), big.mark = ","), "segments"))
+message(paste("  Loaded", format(nrow(long_segments_data), big.mark = ","), "segments"))
+
+# Load manual technical sections if they exist
+technical_sections_file <- file.path(clean_data_dir, "manual_technical_sections.csv")
+if (file.exists(technical_sections_file)) {
+  manual_technical_sections <- read.csv(technical_sections_file, stringsAsFactors = FALSE)
+  manual_technical_sections <- manual_technical_sections %>%
+    mutate(
+      start_time = ymd_hms(start_time),
+      end_time = ymd_hms(end_time)
+    )
+  message(paste("  Loaded", nrow(manual_technical_sections), "manual technical climbing sections"))
+} else {
+  manual_technical_sections <- NULL
+  message("  No manual technical sections found")
+}
 
 # Get unique activities
-n_activities <- length(unique(denoised_segments_data$activity_id))
+n_activities <- length(unique(long_segments_data$activity_id))
 message(paste("  Activities:", n_activities))
 
 # Create distance-based intervals
 message(paste("\nCreating distance intervals with", distance_interval_mi, "mile buckets..."))
 
-distance_intervals <- create_distance_intervals(denoised_segments_data, distance_interval_mi)
+distance_intervals <- create_distance_intervals(long_segments_data, distance_interval_mi)
 
 # Summary statistics
 message("\n=== Interval Summary ===")
@@ -159,16 +174,53 @@ distance_intervals <- distance_intervals %>%
       is.na(rolling_avg_elevation_change),
       net_elevation_change_ft,
       rolling_avg_elevation_change
-    ),
+    )
+  ) %>%
+  ungroup()
 
-    # Classify terrain type
+# Check for manual technical climbing sections and mark intervals
+if (!is.null(manual_technical_sections) && nrow(manual_technical_sections) > 0) {
+  message("  Applying manual technical climbing section overrides...")
+
+  # Parse timestamps in distance_intervals
+  distance_intervals$interval_start_time <- ymd_hms(distance_intervals$interval_start_time)
+
+  # Mark intervals that fall within technical sections
+  distance_intervals <- distance_intervals %>%
+    left_join(
+      manual_technical_sections %>%
+        select(activity_id, section_id, start_time, end_time) %>%
+        rename(tech_section_id = section_id, tech_start = start_time, tech_end = end_time),
+      by = "activity_id",
+      relationship = "many-to-many"
+    ) %>%
+    mutate(
+      # Check if interval falls within technical section
+      is_technical = !is.na(tech_start) & !is.na(tech_end) &
+                     interval_start_time >= tech_start & interval_start_time <= tech_end
+    ) %>%
+    # Keep only one match per interval (first technical section if multiple overlap)
+    group_by(activity_id, distance_interval) %>%
+    slice(1) %>%
+    ungroup() %>%
+    select(-tech_start, -tech_end, -tech_section_id)
+
+  n_technical_intervals <- sum(distance_intervals$is_technical, na.rm = TRUE)
+  message(paste("    Marked", n_technical_intervals, "intervals as technical climbing"))
+} else {
+  distance_intervals$is_technical <- FALSE
+}
+
+# Classify terrain type (technical climbing takes precedence)
+distance_intervals <- distance_intervals %>%
+  mutate(
     terrain_type = case_when(
+      is_technical ~ "technical_climbing",
       rolling_avg_elevation_change > terrain_climb_threshold_ft ~ "climbing",
       rolling_avg_elevation_change < terrain_descent_threshold_ft ~ "descending",
       TRUE ~ "flats"
     )
-  ) %>%
-  ungroup()
+  )
 
 # Terrain classification summary
 terrain_counts <- distance_intervals %>%

@@ -244,11 +244,11 @@ plot6_gg <- ggplot(climb_data, aes(x = section_distance_mi, y = rate_of_ascent_f
     plot.title = element_text(size = 14, face = "bold"),
     axis.title = element_text(size = 11)
   )
-plot4 <- ggplotly(plot4_gg, tooltip = c("x", "y")) %>%
+plot6 <- ggplotly(plot6_gg, tooltip = c("x", "y")) %>%
   layout(height = 350, margin = list(l = 60, r = 20, t = 50, b = 50))
 
-# Plot 5: Elevation Gain vs Time
-plot5_gg <- ggplot(climb_data, aes(x = elevation_gain_ft, y = active_time_min)) +
+# Plot 7: Elevation Gain vs Time
+plot7_gg <- ggplot(climb_data, aes(x = elevation_gain_ft, y = active_time_min)) +
   geom_point(alpha = 0.6, color = plot_color, size = 2) +
   geom_smooth(method = "lm", se = TRUE, color = "#333333", fill = "grey80", alpha = 0.3, linewidth = 1) +
   labs(
@@ -261,11 +261,11 @@ plot5_gg <- ggplot(climb_data, aes(x = elevation_gain_ft, y = active_time_min)) 
     plot.title = element_text(size = 14, face = "bold"),
     axis.title = element_text(size = 11)
   )
-plot5 <- ggplotly(plot5_gg, tooltip = c("x", "y")) %>%
+plot7 <- ggplotly(plot7_gg, tooltip = c("x", "y")) %>%
   layout(height = 350, margin = list(l = 60, r = 20, t = 50, b = 50))
 
-# Plot 6: Grade vs Ascent Rate
-plot6_gg <- ggplot(climb_data, aes(x = calculated_grade_percent, y = rate_of_ascent_ft_hr)) +
+# Plot 8: Grade vs Ascent Rate
+plot8_gg <- ggplot(climb_data, aes(x = calculated_grade_percent, y = rate_of_ascent_ft_hr)) +
   geom_point(alpha = 0.6, color = plot_color, size = 2) +
   geom_smooth(method = "lm", se = TRUE, color = "#333333", fill = "grey80", alpha = 0.3, linewidth = 1) +
   labs(
@@ -278,11 +278,11 @@ plot6_gg <- ggplot(climb_data, aes(x = calculated_grade_percent, y = rate_of_asc
     plot.title = element_text(size = 14, face = "bold"),
     axis.title = element_text(size = 11)
   )
-plot6 <- ggplotly(plot6_gg, tooltip = c("x", "y")) %>%
+plot8 <- ggplotly(plot8_gg, tooltip = c("x", "y")) %>%
   layout(height = 350, margin = list(l = 60, r = 20, t = 50, b = 50))
 
-# Plot 7: Distance vs Elevation Gain (Climb Difficulty)
-plot7_gg <- ggplot(climb_data, aes(x = section_distance_mi, y = elevation_gain_ft)) +
+# Plot 9: Distance vs Elevation Gain (Climb Difficulty)
+plot9_gg <- ggplot(climb_data, aes(x = section_distance_mi, y = elevation_gain_ft)) +
   geom_point(alpha = 0.6, color = plot_color, size = 2) +
   geom_smooth(method = "lm", se = TRUE, color = "#333333", fill = "grey80", alpha = 0.3, linewidth = 1) +
   labs(
@@ -295,11 +295,11 @@ plot7_gg <- ggplot(climb_data, aes(x = section_distance_mi, y = elevation_gain_f
     plot.title = element_text(size = 14, face = "bold"),
     axis.title = element_text(size = 11)
   )
-plot7 <- ggplotly(plot7_gg, tooltip = c("x", "y")) %>%
+plot9 <- ggplotly(plot9_gg, tooltip = c("x", "y")) %>%
   layout(height = 350, margin = list(l = 60, r = 20, t = 50, b = 50))
 
-# Plot 8: Time of Day vs Average Speed
-plot8_gg <- ggplot(climb_data, aes(x = start_hour, y = rate_of_ascent_ft_hr)) +
+# Plot 10: Time of Day vs Average Speed
+plot10_gg <- ggplot(climb_data, aes(x = start_hour, y = rate_of_ascent_ft_hr)) +
   geom_point(alpha = 0.6, color = plot_color, size = 2) +
   geom_smooth(method = "lm", se = TRUE, color = "#333333", fill = "grey80", alpha = 0.3, linewidth = 1) +
   labs(
@@ -313,7 +313,7 @@ plot8_gg <- ggplot(climb_data, aes(x = start_hour, y = rate_of_ascent_ft_hr)) +
     plot.title = element_text(size = 14, face = "bold"),
     axis.title = element_text(size = 11)
   )
-plot8 <- ggplotly(plot8_gg, tooltip = c("x", "y")) %>%
+plot10 <- ggplotly(plot10_gg, tooltip = c("x", "y")) %>%
   layout(height = 350, margin = list(l = 60, r = 20, t = 50, b = 50))
 
 # Plot 11: Rest Time vs Elapsed Time (Fatigue Analysis)
