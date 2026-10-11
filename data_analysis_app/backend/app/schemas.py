@@ -11,6 +11,7 @@ class ActivityBase(BaseModel):
     weight_carried_lbs: Optional[float] = None
     party_size: Optional[int] = None
     notes: Optional[str] = None
+    is_planned: Optional[bool] = None
 
 
 class ActivityCreate(ActivityBase):
@@ -26,6 +27,7 @@ class ActivityUpdate(BaseModel):
     weight_carried_lbs: Optional[float] = None
     party_size: Optional[int] = None
     notes: Optional[str] = None
+    is_planned: Optional[bool] = None
 
 
 class Activity(ActivityBase):
@@ -39,6 +41,7 @@ class Activity(ActivityBase):
     total_distance_mi: Optional[float] = None
     total_elevation_gain_ft: Optional[float] = None
     total_elevation_loss_ft: Optional[float] = None
+    is_planned: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -59,6 +62,7 @@ class Point(PointBase):
     id: int
     activity_id: str
     is_removed: bool = False
+    is_inactive: bool = False
 
     class Config:
         from_attributes = True
@@ -120,6 +124,15 @@ class UserSegment(UserSegmentBase):
 
     class Config:
         from_attributes = True
+
+
+class SplitSegmentRequest(BaseModel):
+    split_time: datetime
+
+
+class AdjustBoundaryRequest(BaseModel):
+    boundary: str = Field(..., pattern="^(start|end)$")
+    new_time: datetime
 
 
 # Request/Response schemas

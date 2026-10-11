@@ -6,9 +6,13 @@ import { useActivities } from '../hooks/useActivities'
 import { useSummaryStats } from '../hooks/useSummaryStats'
 
 function HomePage() {
-  const { activities, loading: activitiesLoading, error: activitiesError } = useActivities()
-  const { stats, loading: statsLoading } = useSummaryStats()
+  const { activities, loading: activitiesLoading, error: activitiesError, refetch: refetchActivities } = useActivities()
+  const { stats, loading: statsLoading, refetch: refetchStats } = useSummaryStats()
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
+
+  const handleActivityChange = async () => {
+    await Promise.all([refetchActivities(), refetchStats()])
+  }
 
   if (activitiesError) {
     return (
@@ -27,7 +31,7 @@ function HomePage() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <Header />
+      <Header onActivityUploaded={handleActivityChange} />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -66,6 +70,7 @@ function HomePage() {
                           : activity.activity_id
                       )
                     }}
+                    onActivityUpdated={handleActivityChange}
                   />
                 ))}
               </div>

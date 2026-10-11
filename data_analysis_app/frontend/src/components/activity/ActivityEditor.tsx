@@ -124,9 +124,21 @@ const SegmentEditor = memo(({
   points,
   editingSegment,
   onSave,
+  onSaveAndContinue,
   onCancel,
   onDelete,
-  onUpdateTimeRange
+  onUpdateTimeRange,
+  onSplit,
+  onMergeWithPrior,
+  onMergeWithNext,
+  onAdjustStart,
+  onAdjustEnd,
+  isFirstSegment,
+  isLastSegment,
+  onValuesChange,
+  isInSplitMode,
+  isInAdjustStartMode,
+  isInAdjustEndMode
 }: {
   timeRange: { start: string; end: string } | null
   points: Point[]
@@ -137,9 +149,30 @@ const SegmentEditor = memo(({
     difficulty?: string,
     pitchCount?: number
   }) => void
+  onSaveAndContinue?: (data: {
+    timeRange: { start: string; end: string },
+    terrainType: 'rest' | 'non-technical' | 'technical',
+    difficulty?: string,
+    pitchCount?: number
+  }) => void
   onCancel: () => void
   onDelete?: () => void
   onUpdateTimeRange?: (timeRange: { start: string; end: string }) => void
+  onSplit?: () => void
+  onMergeWithPrior?: () => void
+  onMergeWithNext?: () => void
+  onAdjustStart?: () => void
+  onAdjustEnd?: () => void
+  isFirstSegment?: boolean
+  isLastSegment?: boolean
+  onValuesChange?: (values: {
+    terrainType: 'rest' | 'non-technical' | 'technical'
+    difficulty?: string
+    pitchCount?: number
+  }) => void
+  isInSplitMode?: boolean
+  isInAdjustStartMode?: boolean
+  isInAdjustEndMode?: boolean
 }) => {
   const [terrainType, setTerrainType] = useState<'rest' | 'non-technical' | 'technical'>(
     editingSegment
@@ -157,6 +190,13 @@ const SegmentEditor = memo(({
 
   // Initialize time range from editing segment if present
   const effectiveTimeRange = timeRange || (editingSegment ? { start: editingSegment.start_time, end: editingSegment.end_time } : null)
+
+  // Notify parent when values change (for auto-save on close)
+  useEffect(() => {
+    if (editingSegment && onValuesChange) {
+      onValuesChange({ terrainType, difficulty, pitchCount })
+    }
+  }, [terrainType, difficulty, pitchCount, editingSegment, onValuesChange])
 
   // Calculate segment metadata - MUST be called before any conditional returns
   const metadata = useMemo(() => {
@@ -216,6 +256,18 @@ const SegmentEditor = memo(({
       segmentType = 'flat'
     }
 
+    // Calculate average % grade
+    const horizontalDistFt = totalDistance * 5280 // convert miles to feet
+    const avgGrade = horizontalDistFt > 0 ? (elevationChange / horizontalDistFt) * 100 : 0
+
+    // Calculate average climb rate (ft/hour)
+    const durationMinutes = durationHours * 60
+    const climbRate = durationMinutes > 0 ? (elevationChange / durationMinutes) * 60 : 0
+
+    // Calculate % inactive
+    const inactivePoints = segmentPoints.filter(p => p.is_inactive).length
+    const percentInactive = segmentPoints.length > 0 ? (inactivePoints / segmentPoints.length) * 100 : 0
+
       return {
         distance: totalDistance,
         elevationGain,
@@ -223,7 +275,10 @@ const SegmentEditor = memo(({
         elevationChange,
         avgSpeed,
         segmentType,
-        duration: durationHours * 60 // minutes
+        duration: durationMinutes,
+        avgGrade,
+        climbRate,
+        percentInactive
       }
     } catch (err) {
       console.error('Error calculating segment metadata:', err)
@@ -255,8 +310,12 @@ const SegmentEditor = memo(({
       {/* Metadata Display */}
       <div className="bg-gray-50 rounded-md p-3 space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Type:</span>
-            <span className="font-medium text-gray-900 capitalize">{metadata.segmentType}</span>
+            <span className="text-gray-600">Ave. % Grade:</span>
+            <span className="font-medium text-gray-900">{metadata.avgGrade.toFixed(1)}%</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Ave Climb Rate:</span>
+            <span className="font-medium text-gray-900">{Math.round(metadata.climbRate)} ft/hr</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Distance:</span>
@@ -277,6 +336,10 @@ const SegmentEditor = memo(({
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Avg Speed:</span>
             <span className="font-medium text-gray-900">{metadata.avgSpeed.toFixed(1)} mph</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">% Inactive:</span>
+            <span className="font-medium text-gray-900">{metadata.percentInactive.toFixed(0)}%</span>
           </div>
         </div>
 
@@ -329,29 +392,105 @@ const SegmentEditor = memo(({
       )}
 
       {/* Actions */}
-      <div className="space-y-2">
-        <button
-          onClick={() => onSave({
-            timeRange: effectiveTimeRange,
-            terrainType,
-            difficulty: difficulty || undefined,
-            pitchCount: pitchCount > 0 ? pitchCount : undefined
-          })}
-          className="w-full px-4 py-2 bg-accent-600 text-white rounded-md font-medium hover:bg-accent-700 text-sm"
-        >
-          {editingSegment ? 'Update' : 'Save'}
-        </button>
-
-        {/* Delete button - only show when editing existing segment */}
-        {editingSegment && onDelete && (
+      {!editingSegment ? (
+        // Creating new segment - show Save buttons
+        <div className="space-y-2">
           <button
-            onClick={onDelete}
-            className="w-full px-4 py-2 bg-red-600 text-white rounded-md font-medium hover:bg-red-700 text-sm"
+            onClick={() => onSave({
+              timeRange: effectiveTimeRange,
+              terrainType,
+              difficulty: difficulty || undefined,
+              pitchCount: pitchCount > 0 ? pitchCount : undefined
+            })}
+            className="w-full px-4 py-2 bg-accent-600 text-white rounded-md font-medium hover:bg-accent-700 text-sm"
           >
-            Delete Segment
+            Save
           </button>
-        )}
-      </div>
+
+          {onSaveAndContinue && (
+            <button
+              onClick={() => onSaveAndContinue({
+                timeRange: effectiveTimeRange,
+                terrainType,
+                difficulty: difficulty || undefined,
+                pitchCount: pitchCount > 0 ? pitchCount : undefined
+              })}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 text-sm"
+            >
+              Save and Continue
+            </button>
+          )}
+        </div>
+      ) : (
+        // Editing existing segment - show 5 action buttons
+        <div className="space-y-2">
+          {/* Split Segment - full width */}
+          {onSplit && (
+            <button
+              onClick={onSplit}
+              className={`w-full px-3 py-2 rounded-md font-medium text-sm ${
+                isInSplitMode
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+              }`}
+            >
+              Split Segment
+            </button>
+          )}
+
+          {/* Merge buttons - same row */}
+          <div className="grid grid-cols-2 gap-2">
+            {onMergeWithPrior && (
+              <button
+                onClick={onMergeWithPrior}
+                disabled={isFirstSegment}
+                className="px-3 py-2 bg-gray-200 text-gray-800 rounded-md font-medium hover:bg-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Merge with Prior
+              </button>
+            )}
+            {onMergeWithNext && (
+              <button
+                onClick={onMergeWithNext}
+                disabled={isLastSegment}
+                className="px-3 py-2 bg-gray-200 text-gray-800 rounded-md font-medium hover:bg-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Merge with Next
+              </button>
+            )}
+          </div>
+
+          {/* Adjust buttons - same row */}
+          <div className="grid grid-cols-2 gap-2">
+            {onAdjustStart && (
+              <button
+                onClick={onAdjustStart}
+                disabled={isFirstSegment}
+                className={`px-3 py-2 rounded-md font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isInAdjustStartMode
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                }`}
+              >
+                Adjust Start
+              </button>
+            )}
+            {onAdjustEnd && (
+              <button
+                onClick={onAdjustEnd}
+                disabled={isLastSegment}
+                className={`px-3 py-2 rounded-md font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isInAdjustEndMode
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                }`}
+              >
+                Adjust End
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 })
@@ -364,7 +503,7 @@ const ViewSegments = memo(({
   editingSegmentId,
   creatingSegment,
   segmentEditor,
-  onStartCreating,
+  onGenerateSegments,
   onDeleteSegment,
   onSelectSegment
 }: {
@@ -374,19 +513,35 @@ const ViewSegments = memo(({
   editingSegmentId: number | null
   creatingSegment: boolean
   segmentEditor: React.ReactNode
-  onStartCreating: () => void
+  onGenerateSegments: () => void
   onDeleteSegment: (id: number) => void
   onSelectSegment: (id: number) => void
 }) => {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [showTopFade, setShowTopFade] = useState(false)
+  const [showBottomFade, setShowBottomFade] = useState(true)
+
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return
+
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+    setShowTopFade(scrollTop > 0)
+    setShowBottomFade(scrollTop + clientHeight < scrollHeight - 1)
+  }, [])
+
+  useEffect(() => {
+    handleScroll() // Check initial state
+  }, [segments, handleScroll])
+
   return (
     <div className="flex flex-col h-full space-y-3">
-      {/* Create Button */}
+      {/* Generate Segments Button */}
       {!creatingSegment && (
         <button
-          onClick={onStartCreating}
+          onClick={onGenerateSegments}
           className="w-full px-4 py-2 bg-accent-600 text-white rounded-md font-medium hover:bg-accent-700"
         >
-          Create Segment
+          Generate Segments
         </button>
       )}
 
@@ -399,66 +554,89 @@ const ViewSegments = memo(({
 
       {/* Segments List */}
       {segments.length > 0 ? (
-        <div className="space-y-2 flex-1 overflow-y-auto">
-          {segments.map((segment) => {
-            const isEditing = editingSegmentId === segment.id
-            const isHighlighted = selectedSegmentId === segment.id && !isEditing
-            const colors = getSegmentColors(segment.segment_type)
-            const metadata = calculateSegmentMetadata(points, segment.start_time, segment.end_time)
+        <div className="flex-1 relative min-h-0">
+          {/* Fade overlay at top */}
+          {showTopFade && (
+            <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
+          )}
 
-            return (
-              <div
-                key={segment.id}
-                className={`border-l-4 ${colors.leftBar} pl-3 py-2 transition-all ${
-                  isEditing || isHighlighted ? 'bg-gray-50' : ''
-                }`}
-              >
-                {/* Segment Header - always visible */}
+          {/* Scrollable segments */}
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="absolute inset-0 space-y-2 overflow-y-auto pr-2"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            <style>{`
+              div.absolute.inset-0.space-y-2::-webkit-scrollbar {
+                display: none;
+              }
+            `}</style>
+            {segments.map((segment) => {
+              const isEditing = editingSegmentId === segment.id
+              const isHighlighted = selectedSegmentId === segment.id && !isEditing
+              const colors = getSegmentColors(segment.segment_type)
+              const metadata = calculateSegmentMetadata(points, segment.start_time, segment.end_time)
+
+              return (
                 <div
-                  onClick={() => onSelectSegment(segment.id)}
-                  className="cursor-pointer hover:opacity-75 transition-opacity"
+                  key={segment.id}
+                  className={`border-l-4 ${colors.leftBar} pl-3 py-2 transition-all ${
+                    isEditing || isHighlighted ? 'bg-gray-50' : ''
+                  }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold text-gray-900 uppercase">
-                          {segment.segment_type}
-                        </span>
-                        {segment.is_technical && (
-                          <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">
-                            Technical
+                  {/* Segment Header - always visible */}
+                  <div
+                    onClick={() => onSelectSegment(segment.id)}
+                    className="cursor-pointer hover:opacity-75 transition-opacity"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-semibold text-gray-900 uppercase">
+                            {segment.segment_type}
                           </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        <div className="flex gap-3">
-                          <span>{metadata.distance.toFixed(2)} mi</span>
-                          <span>{Math.round(metadata.duration)} min</span>
-                          <span>{metadata.elevationChange > 0 ? '+' : ''}{Math.round(metadata.elevationChange)} ft</span>
+                          {segment.is_technical && (
+                            <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">
+                              Technical
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          <div className="flex gap-3">
+                            <span>{metadata.distance.toFixed(2)} mi</span>
+                            <span>{Math.round(metadata.duration)} min</span>
+                            <span>{metadata.elevationChange > 0 ? '+' : ''}{Math.round(metadata.elevationChange)} ft</span>
+                          </div>
                         </div>
                       </div>
+                      {/* Expand/collapse indicator */}
+                      <svg
+                        className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ml-2 ${isEditing ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
-                    {/* Expand/collapse indicator */}
-                    <svg
-                      className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ml-2 ${isEditing ? 'rotate-180' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
                   </div>
-                </div>
 
-                {/* Editor - shown when segment is being edited */}
-                {isEditing && (
-                  <div className="p-3">
-                    {segmentEditor}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                  {/* Editor - shown when segment is being edited */}
+                  {isEditing && (
+                    <div className="p-3">
+                      {segmentEditor}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Fade overlay at bottom */}
+          {showBottomFade && (
+            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
+          )}
         </div>
       ) : (
         <p className="text-sm text-gray-500">No segments yet. Create your first segment by drawing on the charts below.</p>
@@ -575,16 +753,17 @@ const EditControls = memo(({
 
 interface ActivityEditorProps {
   activity: Activity
+  onActivityUpdated?: () => void
 }
 
-function ActivityEditor({ activity }: ActivityEditorProps) {
+function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
   const [points, setPoints] = useState<Point[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [selectedPointIndices, setSelectedPointIndices] = useState<number[]>([])
   const [removing, setRemoving] = useState(false)
-  const [activePanel, setActivePanel] = useState<'metadata' | 'waypoints' | 'segments'>('metadata')
+  const [activePanel, setActivePanel] = useState<'metadata' | 'waypoints' | 'segments' | null>('metadata')
 
   // Segment creation/editing state
   const [creatingSegment, setCreatingSegment] = useState(false)
@@ -592,6 +771,17 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
   const [segmentTimeRange, setSegmentTimeRange] = useState<{ start: string; end: string } | null>(null)
   const [userSegments, setUserSegments] = useState<UserSegment[]>([])
   const [selectedSegmentId, setSelectedSegmentId] = useState<number | null>(null)
+  const [editingMode, setEditingMode] = useState<
+    | null
+    | { type: 'split', segmentId: number }
+    | { type: 'adjust-start', segmentId: number }
+    | { type: 'adjust-end', segmentId: number }
+  >(null)
+  const [currentEditingValues, setCurrentEditingValues] = useState<{
+    terrainType: 'rest' | 'non-technical' | 'technical'
+    difficulty?: string
+    pitchCount?: number
+  } | null>(null)
 
   // Auto-enter edit mode when Clean Waypoints panel is opened
   useEffect(() => {
@@ -611,6 +801,52 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
       setSegmentTimeRange(null)
     }
   }, [activePanel])
+
+  // Calculate chart domain based on editing mode
+  const chartDomain = useMemo<[number | string, number | string]>(() => {
+    if (!editingMode) return ['dataMin', 'dataMax']
+
+    const segment = userSegments.find(s => s.id === editingMode.segmentId)
+    if (!segment) return ['dataMin', 'dataMax']
+
+    if (editingMode.type === 'split') {
+      // Show only current segment
+      return [
+        new Date(segment.start_time).getTime(),
+        new Date(segment.end_time).getTime()
+      ]
+    }
+
+    if (editingMode.type === 'adjust-start') {
+      // Show current segment + previous segment
+      const prevSegment = userSegments
+        .filter(s => s.end_time === segment.start_time)
+        .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())[0]
+
+      if (prevSegment) {
+        return [
+          new Date(prevSegment.start_time).getTime(),
+          new Date(segment.end_time).getTime()
+        ]
+      }
+    }
+
+    if (editingMode.type === 'adjust-end') {
+      // Show current segment + next segment
+      const nextSegment = userSegments
+        .filter(s => s.start_time === segment.end_time)
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+
+      if (nextSegment) {
+        return [
+          new Date(segment.start_time).getTime(),
+          new Date(nextSegment.end_time).getTime()
+        ]
+      }
+    }
+
+    return ['dataMin', 'dataMax']
+  }, [editingMode, userSegments])
 
   useEffect(() => {
     fetchActivityData()
@@ -738,14 +974,112 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
     setSegmentTimeRange(null)
   }
 
-  const handleChartClick = useCallback((index: number) => {
+  const handleGenerateSegments = async () => {
+    // Warn if segments exist
+    if (userSegments.length > 0) {
+      const confirmed = window.confirm(
+        'This will delete all existing segments and generate new ones. Continue?'
+      )
+      if (!confirmed) return
+    }
+
     try {
-      if (!creatingSegment && !editingSegmentId) return
+      const result = await userSegmentsAPI.generate(activity.activity_id, userSegments.length > 0)
+      await fetchUserSegments()
+      await fetchActivityData() // Reload points to get updated is_inactive flags
+      alert(`Generated ${result.segments_created} segments (${result.rest_segments} rest periods).\n\nDetected ${result.inactive_points}/${result.total_points} inactive points (${((result.inactive_points/result.total_points)*100).toFixed(1)}%)`)
+    } catch (err: any) {
+      console.error('Error generating segments:', err)
+      alert(`Failed to generate segments: ${err.response?.data?.detail || err.message}`)
+    }
+  }
+
+  const handleSplitSegment = (segmentId: number) => {
+    setEditingMode({ type: 'split', segmentId })
+  }
+
+  const handleMergeWithPrior = async (segmentId: number) => {
+    try {
+      await userSegmentsAPI.mergeWithPrevious(segmentId)
+      await fetchUserSegments()
+      setEditingSegmentId(null)
+      alert('Segments merged successfully!')
+    } catch (err: any) {
+      console.error('Error merging segments:', err)
+      alert(`Failed to merge: ${err.response?.data?.detail || err.message}`)
+    }
+  }
+
+  const handleMergeWithNext = async (segmentId: number) => {
+    try {
+      await userSegmentsAPI.mergeWithNext(segmentId)
+      await fetchUserSegments()
+      setEditingSegmentId(null)
+      alert('Segments merged successfully!')
+    } catch (err: any) {
+      console.error('Error merging segments:', err)
+      alert(`Failed to merge: ${err.response?.data?.detail || err.message}`)
+    }
+  }
+
+  const handleAdjustStart = (segmentId: number) => {
+    setEditingMode({ type: 'adjust-start', segmentId })
+  }
+
+  const handleAdjustEnd = (segmentId: number) => {
+    setEditingMode({ type: 'adjust-end', segmentId })
+  }
+
+  const handleChartClick = useCallback(async (index: number) => {
+    try {
       if (!points || points.length === 0) return
       if (index < 0 || index >= points.length) return
 
       const clickedTime = points[index]?.time
       if (!clickedTime) return
+
+      // Handle special editing modes
+      if (editingMode) {
+        if (editingMode.type === 'split') {
+          // Split the segment at clicked time
+          try {
+            await userSegmentsAPI.split(editingMode.segmentId, clickedTime)
+            await fetchUserSegments()
+            setEditingMode(null)
+            setEditingSegmentId(null)
+            alert('Segment split successfully!')
+          } catch (err: any) {
+            console.error('Error splitting segment:', err)
+            alert(`Failed to split: ${err.response?.data?.detail || err.message}`)
+          }
+        } else if (editingMode.type === 'adjust-start') {
+          // Adjust start boundary
+          try {
+            await userSegmentsAPI.adjustBoundary(editingMode.segmentId, 'start', clickedTime)
+            await fetchUserSegments()
+            setEditingMode(null)
+            alert('Boundary adjusted successfully!')
+          } catch (err: any) {
+            console.error('Error adjusting boundary:', err)
+            alert(`Failed to adjust: ${err.response?.data?.detail || err.message}`)
+          }
+        } else if (editingMode.type === 'adjust-end') {
+          // Adjust end boundary
+          try {
+            await userSegmentsAPI.adjustBoundary(editingMode.segmentId, 'end', clickedTime)
+            await fetchUserSegments()
+            setEditingMode(null)
+            alert('Boundary adjusted successfully!')
+          } catch (err: any) {
+            console.error('Error adjusting boundary:', err)
+            alert(`Failed to adjust: ${err.response?.data?.detail || err.message}`)
+          }
+        }
+        return
+      }
+
+      // Normal segment creation/editing mode
+      if (!creatingSegment && !editingSegmentId) return
 
       if (!segmentTimeRange) {
         // First click - set start time
@@ -765,7 +1099,7 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
     } catch (err) {
       console.error('Error handling chart click:', err)
     }
-  }, [creatingSegment, editingSegmentId, segmentTimeRange, points])
+  }, [creatingSegment, editingSegmentId, segmentTimeRange, points, editingMode])
 
   const handleSaveSegment = async (data: {
     timeRange: { start: string; end: string },
@@ -842,6 +1176,67 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
     }
   }
 
+  const handleSaveAndContinueSegment = async (data: {
+    timeRange: { start: string; end: string },
+    terrainType: 'rest' | 'non-technical' | 'technical',
+    difficulty?: string,
+    pitchCount?: number
+  }) => {
+    const { timeRange, terrainType, difficulty, pitchCount } = data
+
+    try {
+      // Determine segment_type and is_technical based on terrain selection
+      let segmentType: 'climb' | 'descent' | 'flat' | 'rest'
+      let isTechnical: boolean
+
+      if (terrainType === 'rest') {
+        segmentType = 'rest'
+        isTechnical = false
+      } else {
+        // Auto-detect climb/descent/flat
+        const segmentPoints = points.filter(p => p.time >= timeRange.start && p.time <= timeRange.end)
+        let elevationGain = 0
+        let elevationLoss = 0
+        for (let i = 0; i < segmentPoints.length - 1; i++) {
+          const delta = segmentPoints[i + 1].elevation_ft - segmentPoints[i].elevation_ft
+          if (delta > 0) elevationGain += delta
+          else elevationLoss += Math.abs(delta)
+        }
+
+        if (elevationGain > 50 && elevationGain > elevationLoss * 1.5) {
+          segmentType = 'climb'
+        } else if (elevationLoss > 50 && elevationLoss > elevationGain * 1.5) {
+          segmentType = 'descent'
+        } else {
+          segmentType = 'flat'
+        }
+
+        isTechnical = terrainType === 'technical'
+      }
+
+      // Create new segment
+      await userSegmentsAPI.create(activity.activity_id, {
+        segment_type: segmentType,
+        start_time: timeRange.start,
+        end_time: timeRange.end,
+        is_technical: isTechnical,
+        difficulty: difficulty || undefined,
+        pitch_count: pitchCount
+      })
+      alert('Segment created successfully!')
+
+      // Refresh segments list
+      await fetchUserSegments()
+
+      // Continue creating - set new start point to the end of the saved segment
+      setSegmentTimeRange({ start: timeRange.end, end: timeRange.end })
+      setSelectedPointIndices([])
+    } catch (err) {
+      console.error('Error saving segment:', err)
+      alert(`Failed to save segment: ${err}`)
+    }
+  }
+
   const handleDeleteSegment = async (segmentId: number) => {
     if (!confirm('Delete this segment?')) return
 
@@ -858,13 +1253,69 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
     }
   }
 
-  const handleSelectSegment = (segmentId: number) => {
+  const handleEditingValuesChange = useCallback((values: {
+    terrainType: 'rest' | 'non-technical' | 'technical'
+    difficulty?: string
+    pitchCount?: number
+  }) => {
+    setCurrentEditingValues(values)
+  }, [])
+
+  const handleSelectSegment = async (segmentId: number) => {
     // Clicking a segment enters edit mode for that segment
     if (editingSegmentId === segmentId) {
-      // If already editing this segment, close the editor
+      // Save before closing if there are current editing values
+      if (currentEditingValues && segmentTimeRange) {
+        try {
+          // Determine segment_type based on terrain selection
+          let segmentType: 'climb' | 'descent' | 'flat' | 'rest'
+          let isTechnical: boolean
+
+          if (currentEditingValues.terrainType === 'rest') {
+            segmentType = 'rest'
+            isTechnical = false
+          } else {
+            // Auto-detect climb/descent/flat
+            const segmentPoints = points.filter(p => p.time >= segmentTimeRange.start && p.time <= segmentTimeRange.end)
+            let elevationGain = 0
+            let elevationLoss = 0
+            for (let i = 0; i < segmentPoints.length - 1; i++) {
+              const delta = segmentPoints[i + 1].elevation_ft - segmentPoints[i].elevation_ft
+              if (delta > 0) elevationGain += delta
+              else elevationLoss += Math.abs(delta)
+            }
+
+            if (elevationGain > 50 && elevationGain > elevationLoss * 1.5) {
+              segmentType = 'climb'
+            } else if (elevationLoss > 50 && elevationLoss > elevationGain * 1.5) {
+              segmentType = 'descent'
+            } else {
+              segmentType = 'flat'
+            }
+
+            isTechnical = currentEditingValues.terrainType === 'technical'
+          }
+
+          // Silently update without alert
+          await userSegmentsAPI.update(editingSegmentId, {
+            segment_type: segmentType,
+            start_time: segmentTimeRange.start,
+            end_time: segmentTimeRange.end,
+            is_technical: isTechnical,
+            difficulty: currentEditingValues.difficulty || undefined,
+            pitch_count: currentEditingValues.pitchCount
+          })
+          await fetchUserSegments()
+        } catch (err) {
+          console.error('Error saving segment on close:', err)
+        }
+      }
+
+      // Close the editor
       setEditingSegmentId(null)
       setSegmentTimeRange(null)
       setSelectedSegmentId(null)
+      setCurrentEditingValues(null)
     } else {
       // Start editing this segment
       setEditingSegmentId(segmentId)
@@ -998,6 +1449,7 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
         </div>
       )}
 
+
       {/* Map and Charts */}
       <div className={`relative min-h-[600px] ${loading ? 'opacity-40 pointer-events-none' : ''}`}>
         {/* Background Map Layer - fills entire area */}
@@ -1022,49 +1474,69 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
         {/* Floating Content Grid - on top of map */}
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pointer-events-none">
         {/* Left Column - Charts (2/3 width) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={`lg:col-span-2 space-y-6 ${editingMode ? '-mt-10' : ''}`}>
           {/* Empty space in top-left for map visibility - increased for more map space */}
           <div className="h-[500px]"></div>
 
-          {/* Charts - floating white box */}
-          <div className="bg-white rounded-lg shadow-lg p-4 space-y-6 pointer-events-auto">
+          {/* Editing Mode Prompt + Charts - wrapped together to remove gap */}
+          <div className="pointer-events-auto">
+            {/* Editing Mode Prompt - Tab style above charts */}
+            {editingMode && (
+              <div className="flex justify-start">
+                <div className="bg-blue-600 text-white px-6 py-2 rounded-t-lg shadow-lg flex items-center gap-4 -ml-1">
+                  <span className="text-sm font-medium">
+                    {editingMode.type === 'split' && 'Click on chart to split segment'}
+                    {editingMode.type === 'adjust-start' && 'Click to set new start time'}
+                    {editingMode.type === 'adjust-end' && 'Click to set new end time'}
+                  </span>
+                  <button
+                    onClick={() => setEditingMode(null)}
+                    className="px-3 py-1 bg-white text-blue-600 rounded hover:bg-gray-100 text-xs font-medium"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Charts - floating white box */}
+            <div className={`bg-white rounded-lg shadow-lg p-4 space-y-6 ${
+              editingMode ? 'ring-4 ring-blue-500' : ''
+            } ${editingMode ? 'rounded-t-none' : ''}`}>
             {/* Elevation Chart */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Elevation</h3>
-              <ElevationChart
-                points={points}
-                editMode={editMode || creatingSegment || editingSegmentId !== null}
-                isPointSelected={isPointSelected}
-                onPointClick={
-                  creatingSegment || editingSegmentId !== null
-                    ? handleChartClick
-                    : editMode
-                    ? handleTogglePoint
-                    : undefined
-                }
-                highlightSegment={selectedSegmentHighlight}
-                segmentMode={activePanel === 'segments'}
-              />
-            </div>
+            <ElevationChart
+              points={points}
+              editMode={editMode || creatingSegment || editingSegmentId !== null}
+              isPointSelected={isPointSelected}
+              onPointClick={
+                creatingSegment || editingSegmentId !== null
+                  ? handleChartClick
+                  : editMode
+                  ? handleTogglePoint
+                  : undefined
+              }
+              highlightSegment={selectedSegmentHighlight}
+              segmentMode={activePanel === 'segments'}
+              xDomain={chartDomain}
+            />
 
             {/* Speed Chart */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Speed</h3>
-              <SpeedChart
-                points={points}
-                editMode={editMode || creatingSegment || editingSegmentId !== null}
-                isPointSelected={isPointSelected}
-                onPointClick={
-                  creatingSegment || editingSegmentId !== null
-                    ? handleChartClick
-                    : editMode
-                    ? handleTogglePoint
-                    : undefined
-                }
-                highlightSegment={selectedSegmentHighlight}
-                segmentMode={activePanel === 'segments'}
-              />
-            </div>
+            <SpeedChart
+              points={points}
+              editMode={editMode || creatingSegment || editingSegmentId !== null}
+              isPointSelected={isPointSelected}
+              onPointClick={
+                creatingSegment || editingSegmentId !== null
+                  ? handleChartClick
+                  : editMode
+                  ? handleTogglePoint
+                  : undefined
+              }
+              highlightSegment={selectedSegmentHighlight}
+              segmentMode={activePanel === 'segments'}
+              xDomain={chartDomain}
+            />
+          </div>
           </div>
         </div>
 
@@ -1076,16 +1548,16 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
               id="metadata"
               title="Activity Details"
               isOpen={activePanel === 'metadata'}
-              onToggle={() => setActivePanel('metadata')}
+              onToggle={() => setActivePanel(activePanel === 'metadata' ? null : 'metadata')}
             >
-              <ActivityMetadataForm activity={activity} />
+              <ActivityMetadataForm activity={activity} onActivityUpdated={onActivityUpdated} />
             </AccordionSection>
 
             <AccordionSection
               id="segments"
               title="View Segments"
               isOpen={activePanel === 'segments'}
-              onToggle={() => setActivePanel('segments')}
+              onToggle={() => setActivePanel(activePanel === 'segments' ? null : 'segments')}
               expandContent={true}
             >
               <ViewSegments
@@ -1100,11 +1572,23 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
                     points={points}
                     editingSegment={editingSegmentId ? userSegments.find(s => s.id === editingSegmentId) : undefined}
                     onSave={handleSaveSegment}
+                    onSaveAndContinue={handleSaveAndContinueSegment}
                     onCancel={handleCancelSegmentEditor}
                     onDelete={editingSegmentId ? () => handleDeleteSegment(editingSegmentId) : undefined}
+                    onSplit={editingSegmentId ? () => handleSplitSegment(editingSegmentId) : undefined}
+                    onMergeWithPrior={editingSegmentId ? () => handleMergeWithPrior(editingSegmentId) : undefined}
+                    onMergeWithNext={editingSegmentId ? () => handleMergeWithNext(editingSegmentId) : undefined}
+                    onAdjustStart={editingSegmentId ? () => handleAdjustStart(editingSegmentId) : undefined}
+                    onAdjustEnd={editingSegmentId ? () => handleAdjustEnd(editingSegmentId) : undefined}
+                    isFirstSegment={editingSegmentId ? userSegments.findIndex(s => s.id === editingSegmentId) === 0 : false}
+                    isLastSegment={editingSegmentId ? userSegments.findIndex(s => s.id === editingSegmentId) === userSegments.length - 1 : false}
+                    onValuesChange={handleEditingValuesChange}
+                    isInSplitMode={editingMode?.type === 'split' && editingMode.segmentId === editingSegmentId}
+                    isInAdjustStartMode={editingMode?.type === 'adjust-start' && editingMode.segmentId === editingSegmentId}
+                    isInAdjustEndMode={editingMode?.type === 'adjust-end' && editingMode.segmentId === editingSegmentId}
                   />
                 }
-                onStartCreating={handleStartCreatingSegment}
+                onGenerateSegments={handleGenerateSegments}
                 onDeleteSegment={handleDeleteSegment}
                 onSelectSegment={handleSelectSegment}
               />
@@ -1114,7 +1598,7 @@ function ActivityEditor({ activity }: ActivityEditorProps) {
               id="waypoints"
               title="Clean Waypoints"
               isOpen={activePanel === 'waypoints'}
-              onToggle={() => setActivePanel('waypoints')}
+              onToggle={() => setActivePanel(activePanel === 'waypoints' ? null : 'waypoints')}
             >
               <EditControls
                 selectedPointIndices={selectedPointIndices}

@@ -12,9 +12,10 @@ interface ActivityListItemProps {
   activity: Activity
   isSelected: boolean
   onClick: () => void
+  onActivityUpdated?: () => void
 }
 
-function ActivityListItem({ activity, isSelected, onClick }: ActivityListItemProps) {
+function ActivityListItem({ activity, isSelected, onClick, onActivityUpdated }: ActivityListItemProps) {
   return (
     <div className="relative">
       {/* Connector dot - centered on the vertical line */}
@@ -36,7 +37,19 @@ function ActivityListItem({ activity, isSelected, onClick }: ActivityListItemPro
           {/* Activity info */}
           <div className="flex-1">
             <div className="flex items-center space-x-3 flex-wrap">
-              <div className="text-sm text-gray-500">{formatDate(activity.date)}</div>
+              <div className="text-sm text-gray-500">
+                {activity.start_time_local
+                  ? new Date(activity.start_time_local).toLocaleString([], {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      timeZoneName: 'short'
+                    })
+                  : formatDate(activity.date)
+                }
+              </div>
               <div className="h-4 w-px bg-gray-300"></div>
               <div className="text-lg font-semibold text-gray-900">
                 {activity.activity_name || activity.activity_id}
@@ -44,6 +57,11 @@ function ActivityListItem({ activity, isSelected, onClick }: ActivityListItemPro
               <div className="text-sm text-gray-500 uppercase tracking-wide">
                 {formatActivityType(activity.activity_type)}
               </div>
+              {activity.is_planned && (
+                <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                  Planned Route
+                </span>
+              )}
             </div>
 
             {/* Stats row */}
@@ -95,7 +113,7 @@ function ActivityListItem({ activity, isSelected, onClick }: ActivityListItemPro
             className="mt-6 pt-6 border-t border-gray-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <ActivityEditor activity={activity} />
+            <ActivityEditor activity={activity} onActivityUpdated={onActivityUpdated} />
           </div>
         )}
       </div>

@@ -2,6 +2,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import timedelta
+import math
 import pandas as pd
 from .. import models, schemas
 from ..database import get_db
@@ -74,7 +76,8 @@ def get_decimated_points(
         'lon': p.lon,
         'elevation_m': p.elevation_m,
         'elevation_ft': p.elevation_ft,
-        'is_removed': p.is_removed
+        'is_removed': p.is_removed,
+        'is_inactive': p.is_inactive
     } for p in points]
 
     points_df = pd.DataFrame(points_data)
@@ -175,4 +178,102 @@ def restore_points(
     return {
         "message": f"Restored {len(points_to_restore)} points",
         "points_restored": len(points_to_restore)
+    }
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate great circle distance between two points in miles."""
+    R = 3959  # Earth's radius in miles
+    dLat = (lat2 - lat1) * math.pi / 180
+    dLon = (lon2 - lon1) * math.pi / 180
+    a = (
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) * math.cos(lat2 * math.pi / 180) *
+        math.sin(dLon / 2) * math.sin(dLon / 2)
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+
+@router.post("/activities/{activity_id}/points/calculate-inactivity")
+def calculate_inactivity(
+    activity_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Calculate rolling 3-minute average speed for all points and mark inactive points.
+    A point is considered inactive if its rolling average speed < 0.05 mph.
+    Uses a centered window (1.5 min before + 1.5 min after each point).
+    """
+    # Verify activity exists
+    activity = db.query(models.Activity).filter(
+        models.Activity.activity_id == activity_id
+    ).first()
+
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    # Get all non-removed points ordered by time
+    points = db.query(models.Point).filter(
+        models.Point.activity_id == activity_id,
+        models.Point.is_removed == False
+    ).order_by(models.Point.time).all()
+
+    if len(points) < 2:
+        return {
+            "message": "Not enough points for inactivity calculation",
+            "points_processed": 0,
+            "inactive_points": 0
+        }
+
+    inactive_count = 0
+    window_seconds = 90  # ±90 seconds = 3-minute centered window
+
+    for i, point in enumerate(points):
+        # Define time window
+        window_start = point.time - timedelta(seconds=window_seconds)
+        window_end = point.time + timedelta(seconds=window_seconds)
+
+        # Get points within window
+        window_points = [
+            p for p in points
+            if window_start <= p.time <= window_end
+        ]
+
+        if len(window_points) < 2:
+            # Not enough points in window - mark as inactive (conservative)
+            point.is_inactive = True
+            inactive_count += 1
+            continue
+
+        # Calculate total distance traveled in window
+        total_distance = 0
+        for j in range(len(window_points) - 1):
+            p1 = window_points[j]
+            p2 = window_points[j + 1]
+            distance = haversine_distance(p1.lat, p1.lon, p2.lat, p2.lon)
+            total_distance += distance
+
+        # Calculate time span of window in hours
+        time_span = (window_points[-1].time - window_points[0].time).total_seconds() / 3600
+
+        # Calculate average speed
+        if time_span > 0:
+            avg_speed = total_distance / time_span
+        else:
+            avg_speed = 0
+
+        # Mark as inactive if average speed < 0.05 mph
+        point.is_inactive = avg_speed < 0.05
+        if point.is_inactive:
+            inactive_count += 1
+
+    # Commit all changes
+    db.commit()
+
+    return {
+        "message": f"Inactivity calculated for {len(points)} points",
+        "points_processed": len(points),
+        "inactive_points": inactive_count,
+        "inactive_percentage": round((inactive_count / len(points)) * 100, 1) if points else 0
     }

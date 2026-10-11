@@ -19,6 +19,7 @@ export interface Activity {
   weight_carried_lbs: number | null;
   party_size: number | null;
   notes: string | null;
+  is_planned: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +33,7 @@ export interface Point {
   elevation_m: number;
   elevation_ft: number;
   is_removed: boolean;
+  is_inactive: boolean;
 }
 
 export interface Segment {
@@ -88,6 +90,7 @@ export interface ActivityUpdate {
   weight_carried_lbs?: number;
   party_size?: number;
   notes?: string;
+  is_planned?: boolean;
 }
 
 export interface UserSegmentCreate {

@@ -135,15 +135,58 @@ export const userSegmentsAPI = {
   delete: async (segmentId: number): Promise<void> => {
     await apiClient.delete(`/user-segments/${segmentId}`);
   },
+
+  // Generate segments automatically
+  generate: async (activityId: string, force: boolean = false): Promise<any> => {
+    const response = await apiClient.post(`/activities/${activityId}/segments/generate`, null, {
+      params: { force }
+    });
+    return response.data;
+  },
+
+  // Split segment
+  split: async (segmentId: number, splitTime: string): Promise<UserSegment[]> => {
+    const response = await apiClient.post<UserSegment[]>(
+      `/user-segments/${segmentId}/split`,
+      { split_time: splitTime }
+    );
+    return response.data;
+  },
+
+  // Merge with next segment
+  mergeWithNext: async (segmentId: number): Promise<UserSegment> => {
+    const response = await apiClient.post<UserSegment>(
+      `/user-segments/${segmentId}/merge-with-next`
+    );
+    return response.data;
+  },
+
+  // Merge with previous segment
+  mergeWithPrevious: async (segmentId: number): Promise<UserSegment> => {
+    const response = await apiClient.post<UserSegment>(
+      `/user-segments/${segmentId}/merge-with-previous`
+    );
+    return response.data;
+  },
+
+  // Adjust segment boundary
+  adjustBoundary: async (segmentId: number, boundary: 'start' | 'end', newTime: string): Promise<UserSegment> => {
+    const response = await apiClient.patch<UserSegment>(
+      `/user-segments/${segmentId}/adjust-boundary`,
+      { boundary, new_time: newTime }
+    );
+    return response.data;
+  },
 };
 
 // GPX Upload API
 export const gpxAPI = {
-  upload: async (file: File): Promise<{ activity_id: string; status: string; points_count: number; message: string }> => {
+  upload: async (file: File, isPlanned: boolean = false): Promise<{ activity_id: string; status: string; points_count: number; message: string }> => {
     const formData = new FormData();
     formData.append('file', file);
 
     const response = await apiClient.post('/gpx/upload', formData, {
+      params: { is_planned: isPlanned },
       headers: {
         'Content-Type': 'multipart/form-data',
       },

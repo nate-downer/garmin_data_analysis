@@ -30,6 +30,7 @@ class Activity(Base):
     weight_carried_lbs = Column(Float)
     party_size = Column(Integer)
     notes = Column(Text)
+    is_planned = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -54,6 +55,9 @@ class Point(Base):
 
     # User edit flag (soft delete)
     is_removed = Column(Boolean, default=False)
+
+    # Inactivity flag (for automated segmentation)
+    is_inactive = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     activity = relationship("Activity", back_populates="points")

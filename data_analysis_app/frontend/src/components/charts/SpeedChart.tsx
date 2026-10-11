@@ -1,5 +1,5 @@
-import { memo, useMemo, useState, useRef } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceArea, ReferenceLine } from 'recharts'
+import { memo, useMemo } from 'react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from 'recharts'
 import { Point } from '../../types'
 
 interface SpeedChartProps {
@@ -9,6 +9,7 @@ interface SpeedChartProps {
   isPointSelected?: boolean[]
   highlightSegment?: { start: string; end: string; color: string } | null
   segmentMode?: boolean
+  xDomain?: [number | string, number | string]
 }
 
 // Haversine distance formula
@@ -24,10 +25,7 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c
 }
 
-function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = [], highlightSegment = null, segmentMode = false }: SpeedChartProps) {
-  const [hoveredData, setHoveredData] = useState<{ speed: number; time: string; timestamp: number } | null>(null)
-  const lastUpdateRef = useRef<number>(0)
-
+function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = [], highlightSegment = null, segmentMode = false, xDomain = ['dataMin', 'dataMax'] }: SpeedChartProps) {
   // Calculate speed between consecutive points (memoized for performance)
   const data = useMemo(() => {
     const result = []
@@ -64,18 +62,7 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
   }
 
   return (
-    <div className="relative">
-      {/* Title with live data */}
-      <div className="absolute top-0 left-0 text-xs font-medium text-gray-700 z-10 pl-2">
-        Speed
-        {hoveredData && (
-          <span className="ml-2 text-gray-600">
-            - {hoveredData.speed} mph at {hoveredData.time}
-          </span>
-        )}
-      </div>
-
-      <ResponsiveContainer width="100%" height={150}>
+    <ResponsiveContainer width="100%" height={150}>
         <LineChart
           data={data}
           margin={{ top: 20, right: 5, left: 10, bottom: 5 }}
@@ -84,27 +71,13 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
               onPointClick(e.activeTooltipIndex)
             }
           }}
-          onMouseMove={(e: any) => {
-            if (e && e.activeTooltipIndex !== undefined && data[e.activeTooltipIndex]) {
-              const now = Date.now()
-              if (now - lastUpdateRef.current > 50) { // Throttle to 50ms
-                lastUpdateRef.current = now
-                const point = data[e.activeTooltipIndex]
-                setHoveredData({
-                  speed: point.speed,
-                  time: new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  timestamp: point.timestamp
-                })
-              }
-            }
-          }}
-          onMouseLeave={() => setHoveredData(null)}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis
             dataKey="timestamp"
             type="number"
-            domain={['dataMin', 'dataMax']}
+            domain={xDomain}
+            allowDataOverflow={true}
             tick={{ fontSize: 12 }}
             stroke="#9ca3af"
             tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -113,8 +86,18 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
           <YAxis
             tick={{ fontSize: 12 }}
             stroke="#9ca3af"
-            label={{ value: 'Speed (mph)', angle: -90, position: 'center', dx: -25, style: { fontSize: 12, textAnchor: 'middle' } }}
+            label={{ value: 'Speed (mph)', angle: -90, position: 'center', dx: -25, style: { fontSize: 14, textAnchor: 'middle' } }}
           />
+        <Tooltip
+          position={{ y: -15 }}
+          contentStyle={{ fontSize: 11, backgroundColor: 'rgba(255, 255, 255, 0.95)', border: 'none', padding: '4px 8px' }}
+          formatter={(value: number, name: string, props: any) => {
+            const time = new Date(props.payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            return [`${value} mph at ${time}`, '']
+          }}
+          labelFormatter={() => ''}
+          separator=""
+        />
         {highlightSegment && (
           <ReferenceArea
             x1={new Date(highlightSegment.start).getTime()}
@@ -124,14 +107,6 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
             stroke={highlightSegment.color}
             strokeWidth={2}
             strokeOpacity={0.3}
-          />
-        )}
-        {hoveredData && (
-          <ReferenceLine
-            x={hoveredData.timestamp}
-            stroke="#6b7280"
-            strokeWidth={1}
-            strokeDasharray="3 3"
           />
         )}
         <Line
@@ -144,23 +119,11 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
             if (editMode && isPointSelected && isPointSelected[props.index]) {
               return (
                 <circle
+                  key={`selected-${props.index}`}
                   cx={props.cx}
                   cy={props.cy}
                   r={6}
                   fill="#ef4444"
-                  stroke="#fff"
-                  strokeWidth={2}
-                />
-              )
-            }
-            // Show hovered point
-            if (hoveredData && props.payload.timestamp === hoveredData.timestamp) {
-              return (
-                <circle
-                  cx={props.cx}
-                  cy={props.cy}
-                  r={5}
-                  fill="#6b7280"
                   stroke="#fff"
                   strokeWidth={2}
                 />
@@ -172,7 +135,6 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
         />
       </LineChart>
     </ResponsiveContainer>
-    </div>
   )
 }
 

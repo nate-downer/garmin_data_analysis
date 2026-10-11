@@ -16,6 +16,7 @@ router = APIRouter()
 @router.post("/upload", response_model=schemas.GPXUploadResponse)
 async def upload_gpx(
     file: UploadFile = File(...),
+    is_planned: bool = False,
     db: Session = Depends(get_db)
 ):
     """
@@ -85,7 +86,8 @@ async def upload_gpx(
             total_duration_sec=stats['total_duration_sec'],
             total_distance_mi=stats['total_distance_mi'],
             total_elevation_gain_ft=stats['total_elevation_gain_ft'],
-            total_elevation_loss_ft=stats['total_elevation_loss_ft']
+            total_elevation_loss_ft=stats['total_elevation_loss_ft'],
+            is_planned=is_planned
         )
 
         db.add(activity)
