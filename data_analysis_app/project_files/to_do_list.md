@@ -108,16 +108,45 @@ Terrain Factors:
 I would like to take the output of this to calcualte the average power for the segment, and the total energy (in calories) used in the segment. Ultimately, I would like to use the power output as another feature in the prediciton algorithim.
 
 ### Acceptance Criteria:
-- [ ] The activity meta-data is updated to include a terrain type selector
-- [ ] The segment meta-data is update to include the weight and terrain type for each segment. The is inherited from the activity by default, but the user can change this for each segment if they want to.
-- [ ] The appropriate databse updates are made to support these changes.
-- [ ] The Pandolf equation is implemented to calculate average power and total engery used for all non-technical segments. Technical segments are excluded because the equation is not designed to work for proper climbing.
-- [ ] Average power and total energey used are included as summary starts calculated for each segment.
+- [x] The activity meta-data is updated to include a terrain type selector
+- [x] The segment meta-data is update to include the weight and terrain type for each segment. The is inherited from the activity by default, but the user can change this for each segment if they want to.
+- [x] The appropriate databse updates are made to support these changes.
+- [x] The Pandolf equation is implemented to calculate average power and total engery used for all non-technical segments. Technical segments are excluded because the equation is not designed to work for proper climbing.
+- [x] Average power and total energey used are included as summary starts calculated for each segment.
+
+
+## Milestone 0.6 - Activity Analysis
+
+In this update I would like to add a new page (accesible by clicking on the View Analysis button) that allows the user to see an analysis of all of their activities and segments.
+
+The analysis should have the following sections:
+- Activity Analysis
+  - Time serries plot that shows elevation over time traces for all activities
+  - Scatter plot of total time vs. total distance
+  - Scatter plot of total time vs. total elevation
+  - Horizontal bar plot with top 10 activities by total distance
+  - Horizontal bar plot with top 10 activities by total elevation
+- Climb Segment Analysis
+  - Time serries plot that shows elevation over time for all climb segments
+  - Scatter plot of total time vs. total distance
+  - Scatter plot of total time vs. total elevation
+  - Horizontal bar plot with top 10 segments by rate of climb
+  - Horizontal bar plot with top 10 activities by total elevation
+  - Scatter plot with ave pct grade vs. ave speed
+  - scatter plot with ave power vs. ave rate of climb
+
+Additonal plots will be specified after the inital plots are added.
+
+### Acceptance Criteria:
+- [ ] New Activity Analysis page is added
+- [ ] All specified plots have been added in a two column format
+- [ ] Additonal plots specified later have been added
 
 
 
 ## Future Work:
+- [ ] Create comparison visualizations across segments and activities
 - [ ] Create a prediciton algorithim using a baysian model.
 - [ ] Allow the user to predict their time on other routes.
-- [ ] I would like to add the ability to zoom in on the horizontal axis of the plots using a single slider that applies to both plots.
-- [ ] Figure out if total elevation gain is bugged
+- [ ] Figure out if total elevation gain is bugged / ensure total calculations work better
+- [ ] Make the dot field more fun / interactive

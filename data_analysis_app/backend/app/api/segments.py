@@ -8,8 +8,52 @@ import math
 from .. import models, schemas
 from ..database import get_db
 from ..services.calculations import calculate_segments, aggregate_activity_stats
+from app.services.calculations import calculate_pandolf_energy
 
 router = APIRouter()
+
+
+def calculate_segment_energy(user_segment: models.UserSegment, activity: models.Activity, db: Session):
+    """
+    Helper function to calculate and save energy expenditure for a non-technical segment.
+
+    Args:
+        user_segment: The segment to calculate energy for
+        activity: The activity the segment belongs to
+        db: Database session
+    """
+    if user_segment.is_technical:
+        return  # Skip technical segments
+
+    if not activity.body_weight_lbs:
+        user_segment.energy_calculation_error = "Body weight required"
+        return
+
+    # Get all points for the activity
+    points = db.query(models.Point).filter(
+        models.Point.activity_id == activity.activity_id,
+        models.Point.is_removed == False
+    ).order_by(models.Point.time).all()
+
+    # Determine pack weight (segment override or activity default)
+    pack_weight = user_segment.pack_weight_override_lbs or activity.weight_carried_lbs or 0
+
+    # Determine terrain factor (segment override or activity default)
+    terrain_factor = user_segment.terrain_factor if user_segment.terrain_factor is not None else (activity.terrain_factor or 1.1)
+
+    # Calculate energy
+    result = calculate_pandolf_energy(
+        points=points,
+        start_time=user_segment.start_time,
+        end_time=user_segment.end_time,
+        body_weight_lbs=activity.body_weight_lbs,
+        pack_weight_lbs=pack_weight,
+        terrain_factor=terrain_factor
+    )
+
+    user_segment.avg_power_watts = result['avg_power_watts']
+    user_segment.total_energy_kcal = result['total_energy_kcal']
+    user_segment.energy_calculation_error = result['error']
 
 
 @router.get("/activities/{activity_id}/segments", response_model=List[schemas.Segment])
@@ -160,6 +204,38 @@ def create_user_segment(
     db.commit()
     db.refresh(user_segment)
 
+    # Calculate energy expenditure if not a technical segment
+    if not user_segment.is_technical:
+        # Get all points for the activity
+        points = db.query(models.Point).filter(
+            models.Point.activity_id == activity_id,
+            models.Point.is_removed == False
+        ).order_by(models.Point.time).all()
+
+        # Determine pack weight (segment override or activity default)
+        pack_weight = user_segment.pack_weight_override_lbs or activity.weight_carried_lbs or 0
+
+        # Determine terrain factor (segment override or activity default)
+        terrain_factor = user_segment.terrain_factor if user_segment.terrain_factor is not None else (activity.terrain_factor or 1.1)
+
+        # Calculate energy if body weight is available
+        if activity.body_weight_lbs:
+            result = calculate_pandolf_energy(
+                points=points,
+                start_time=user_segment.start_time,
+                end_time=user_segment.end_time,
+                body_weight_lbs=activity.body_weight_lbs,
+                pack_weight_lbs=pack_weight,
+                terrain_factor=terrain_factor
+            )
+
+            user_segment.avg_power_watts = result['avg_power_watts']
+            user_segment.total_energy_kcal = result['total_energy_kcal']
+            user_segment.energy_calculation_error = result['error']
+
+            db.commit()
+            db.refresh(user_segment)
+
     return user_segment
 
 
@@ -184,6 +260,44 @@ def update_user_segment(
 
     db.commit()
     db.refresh(user_segment)
+
+    # Recalculate energy if inputs changed and segment is not technical
+    if not user_segment.is_technical:
+        # Get activity for body weight and default pack weight
+        activity = db.query(models.Activity).filter(
+            models.Activity.activity_id == user_segment.activity_id
+        ).first()
+
+        if activity:
+            # Get all points for the activity
+            points = db.query(models.Point).filter(
+                models.Point.activity_id == user_segment.activity_id,
+                models.Point.is_removed == False
+            ).order_by(models.Point.time).all()
+
+            # Determine pack weight (segment override or activity default)
+            pack_weight = user_segment.pack_weight_override_lbs or activity.weight_carried_lbs or 0
+
+            # Determine terrain factor (segment override or activity default)
+            terrain_factor = user_segment.terrain_factor if user_segment.terrain_factor is not None else (activity.terrain_factor or 1.1)
+
+            # Calculate energy if body weight is available
+            if activity.body_weight_lbs:
+                result = calculate_pandolf_energy(
+                    points=points,
+                    start_time=user_segment.start_time,
+                    end_time=user_segment.end_time,
+                    body_weight_lbs=activity.body_weight_lbs,
+                    pack_weight_lbs=pack_weight,
+                    terrain_factor=terrain_factor
+                )
+
+                user_segment.avg_power_watts = result['avg_power_watts']
+                user_segment.total_energy_kcal = result['total_energy_kcal']
+                user_segment.energy_calculation_error = result['error']
+
+                db.commit()
+                db.refresh(user_segment)
 
     return user_segment
 
@@ -416,17 +530,28 @@ def generate_segments(
 
     # Create user segments in database
     segment_objects = []
+    # Use activity's terrain factor or default to 1.1 (Dirt Road)
+    default_terrain_factor = activity.terrain_factor or 1.1
+
     for seg in all_segments:
         user_segment = models.UserSegment(
             activity_id=activity_id,
             segment_type=seg['segment_type'],
             start_time=seg['start_time'],
             end_time=seg['end_time'],
-            is_technical=seg['is_technical']
+            is_technical=seg['is_technical'],
+            terrain_factor=default_terrain_factor
         )
         segment_objects.append(user_segment)
 
     db.bulk_save_objects(segment_objects)
+    db.commit()
+
+    # Calculate energy for all non-technical segments
+    for segment in segment_objects:
+        db.refresh(segment)  # Refresh to get the ID
+        calculate_segment_energy(segment, activity, db)
+
     db.commit()
 
     return {
@@ -480,7 +605,9 @@ def split_segment(
         difficulty=segment.difficulty,
         pitch_count=segment.pitch_count,
         is_roped=segment.is_roped,
-        rappel_count=segment.rappel_count
+        rappel_count=segment.rappel_count,
+        terrain_factor=segment.terrain_factor,
+        pack_weight_override_lbs=segment.pack_weight_override_lbs
     )
 
     # Create second segment (split point to end)
@@ -494,7 +621,9 @@ def split_segment(
         difficulty=segment.difficulty,
         pitch_count=segment.pitch_count,
         is_roped=segment.is_roped,
-        rappel_count=segment.rappel_count
+        rappel_count=segment.rappel_count,
+        terrain_factor=segment.terrain_factor,
+        pack_weight_override_lbs=segment.pack_weight_override_lbs
     )
 
     # Delete original segment and add new ones
@@ -504,6 +633,17 @@ def split_segment(
     db.commit()
     db.refresh(segment_1)
     db.refresh(segment_2)
+
+    # Calculate energy for both new segments
+    activity = db.query(models.Activity).filter(
+        models.Activity.activity_id == segment.activity_id
+    ).first()
+    if activity:
+        calculate_segment_energy(segment_1, activity, db)
+        calculate_segment_energy(segment_2, activity, db)
+        db.commit()
+        db.refresh(segment_1)
+        db.refresh(segment_2)
 
     return [segment_1, segment_2]
 
@@ -551,7 +691,9 @@ def merge_with_next(
         difficulty=next_segment.difficulty,
         pitch_count=next_segment.pitch_count,
         is_roped=next_segment.is_roped,
-        rappel_count=next_segment.rappel_count
+        rappel_count=next_segment.rappel_count,
+        terrain_factor=next_segment.terrain_factor,
+        pack_weight_override_lbs=next_segment.pack_weight_override_lbs
     )
 
     # Delete both segments and add merged one
@@ -560,6 +702,15 @@ def merge_with_next(
     db.add(merged)
     db.commit()
     db.refresh(merged)
+
+    # Calculate energy for merged segment
+    activity = db.query(models.Activity).filter(
+        models.Activity.activity_id == merged.activity_id
+    ).first()
+    if activity:
+        calculate_segment_energy(merged, activity, db)
+        db.commit()
+        db.refresh(merged)
 
     return merged
 
@@ -607,7 +758,9 @@ def merge_with_previous(
         difficulty=previous.difficulty,
         pitch_count=previous.pitch_count,
         is_roped=previous.is_roped,
-        rappel_count=previous.rappel_count
+        rappel_count=previous.rappel_count,
+        terrain_factor=previous.terrain_factor,
+        pack_weight_override_lbs=previous.pack_weight_override_lbs
     )
 
     # Delete both segments and add merged one
@@ -616,6 +769,15 @@ def merge_with_previous(
     db.add(merged)
     db.commit()
     db.refresh(merged)
+
+    # Calculate energy for merged segment
+    activity = db.query(models.Activity).filter(
+        models.Activity.activity_id == merged.activity_id
+    ).first()
+    if activity:
+        calculate_segment_energy(merged, activity, db)
+        db.commit()
+        db.refresh(merged)
 
     return merged
 

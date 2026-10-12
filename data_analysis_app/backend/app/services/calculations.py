@@ -1,36 +1,186 @@
-"""Calculation utilities for distance, speed, pace, and grade."""
+"""Calculation utilities for segments, statistics, and energy expenditure."""
+import math
 import numpy as np
 import pandas as pd
-from math import radians, cos, sin, asin, sqrt
-from typing import Dict
+from math import sqrt
+from datetime import datetime
+from typing import List, Dict, Optional
+from app import models
 
 
-def haversine_distance(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
-    Calculate geodesic distance between two points using Haversine formula.
+    Calculate great circle distance between two points in meters.
 
     Args:
-        lon1, lat1: Longitude and latitude of first point (degrees)
-        lon2, lat2: Longitude and latitude of second point (degrees)
+        lat1, lon1: First point coordinates (degrees)
+        lat2, lon2: Second point coordinates (degrees)
 
     Returns:
         Distance in meters
     """
-    # Convert decimal degrees to radians
-    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
-
-    # Haversine formula
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * asin(sqrt(a))
-
-    # Earth's radius in meters
-    r = 6371000
-
-    return c * r
+    R = 6371000  # Earth's radius in meters
+    dLat = (lat2 - lat1) * math.pi / 180
+    dLon = (lon2 - lon1) * math.pi / 180
+    a = (
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) * math.cos(lat2 * math.pi / 180) *
+        math.sin(dLon / 2) * math.sin(dLon / 2)
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
 
 
+def calculate_pandolf_energy(
+    points: List[models.Point],
+    start_time: datetime,
+    end_time: datetime,
+    body_weight_lbs: float,
+    pack_weight_lbs: float,
+    terrain_factor: float
+) -> Dict[str, Optional[float]]:
+    """
+    Calculate energy expenditure using the Pandolf Equation.
+
+    The Pandolf Equation:
+    M = 1.5W + 2.0(W + L)(L / W)^2 + n(W + L)(1.5V^2 + 0.35VG)
+
+    Where:
+        M = Metabolic rate (watts)
+        W = Body weight (kg)
+        L = Load/pack weight (kg)
+        V = Velocity (m/s)
+        G = Grade (as decimal, e.g., 0.10 for 10%)
+        n = Terrain factor (1.0-2.1)
+
+    Args:
+        points: List of Point objects for the activity
+        start_time: Segment start time
+        end_time: Segment end time
+        body_weight_lbs: User's body weight in pounds
+        pack_weight_lbs: Pack/load weight in pounds
+        terrain_factor: Terrain factor (1.0-2.1)
+
+    Returns:
+        Dictionary with:
+            avg_power_watts: Average metabolic power (watts)
+            total_energy_kcal: Total energy expenditure (kilocalories)
+            error: Error message if calculation failed, else None
+    """
+    # Validate inputs
+    if not body_weight_lbs or body_weight_lbs <= 0:
+        return {
+            'avg_power_watts': None,
+            'total_energy_kcal': None,
+            'error': 'Body weight required'
+        }
+
+    if body_weight_lbs < 50 or body_weight_lbs > 400:
+        return {
+            'avg_power_watts': None,
+            'total_energy_kcal': None,
+            'error': 'Body weight out of valid range (50-400 lbs)'
+        }
+
+    if pack_weight_lbs is None:
+        pack_weight_lbs = 0
+
+    if pack_weight_lbs < 0 or pack_weight_lbs > 200:
+        return {
+            'avg_power_watts': None,
+            'total_energy_kcal': None,
+            'error': 'Pack weight out of valid range (0-200 lbs)'
+        }
+
+    # Convert weights from lbs to kg
+    W = body_weight_lbs * 0.453592  # Body weight in kg
+    L = pack_weight_lbs * 0.453592  # Load weight in kg
+    n = terrain_factor
+
+    # Filter points to segment time range
+    segment_points = [p for p in points if start_time <= p.time <= end_time]
+
+    if len(segment_points) < 2:
+        return {
+            'avg_power_watts': None,
+            'total_energy_kcal': None,
+            'error': 'Insufficient data points'
+        }
+
+    # Calculate metabolic rate for each point pair
+    metabolic_rates = []
+    time_deltas = []
+
+    for i in range(len(segment_points) - 1):
+        p1 = segment_points[i]
+        p2 = segment_points[i + 1]
+
+        # Calculate horizontal distance in meters
+        horizontal_distance = haversine_distance(p1.lat, p1.lon, p2.lat, p2.lon)
+
+        # Calculate time delta in seconds
+        time_delta = (p2.time - p1.time).total_seconds()
+
+        if time_delta <= 0:
+            continue  # Skip zero or negative time deltas
+
+        # Calculate velocity in m/s
+        V = horizontal_distance / time_delta
+
+        # Calculate elevation change in meters
+        elevation_delta = p2.elevation_m - p1.elevation_m
+
+        # Calculate grade (as decimal, e.g., 0.10 for 10%)
+        if horizontal_distance > 0:
+            G = elevation_delta / horizontal_distance
+        else:
+            G = 0
+
+        # Calculate metabolic rate using Pandolf equation
+        # M = 1.5W + 2.0(W + L)(L / W)^2 + n(W + L)(1.5V^2 + 0.35VG)
+        try:
+            if W > 0:
+                term1 = 1.5 * W
+                term2 = 2.0 * (W + L) * (L / W) ** 2
+                term3 = n * (W + L) * (1.5 * V ** 2 + 0.35 * V * G)
+                M = term1 + term2 + term3
+            else:
+                M = 0
+        except (ZeroDivisionError, ValueError):
+            M = 0
+
+        # Ensure non-negative metabolic rate
+        M = max(0, M)
+
+        metabolic_rates.append(M)
+        time_deltas.append(time_delta)
+
+    if not metabolic_rates:
+        return {
+            'avg_power_watts': None,
+            'total_energy_kcal': None,
+            'error': 'No valid data for calculation'
+        }
+
+    # Calculate average power (mean of metabolic rates)
+    avg_power_watts = sum(metabolic_rates) / len(metabolic_rates)
+
+    # Calculate total energy (sum of M * time_delta)
+    # Result is in watt-seconds (joules)
+    total_joules = sum(M * dt for M, dt in zip(metabolic_rates, time_deltas))
+
+    # Convert joules to kilocalories
+    # 1 joule = 0.000239006 kcal
+    total_energy_kcal = total_joules * 0.000239006
+
+    return {
+        'avg_power_watts': avg_power_watts,
+        'total_energy_kcal': total_energy_kcal,
+        'error': None
+    }
+
+
+# Legacy functions for GPX upload and segment calculation
 def calculate_segments(points_df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate segments between consecutive GPS points.
@@ -56,10 +206,10 @@ def calculate_segments(points_df: pd.DataFrame) -> pd.DataFrame:
         if time_delta == 0:
             continue  # Skip zero-duration segments
 
-        # Horizontal distance (Haversine)
+        # Horizontal distance (Haversine) - note parameter order
         horizontal_dist_m = haversine_distance(
-            p1['lon'], p1['lat'],
-            p2['lon'], p2['lat']
+            p1['lat'], p1['lon'],
+            p2['lat'], p2['lon']
         )
         horizontal_dist_mi = horizontal_dist_m * 0.000621371
 

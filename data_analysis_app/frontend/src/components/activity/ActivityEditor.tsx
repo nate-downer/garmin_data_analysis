@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, startTransition, useMemo, memo } from 'react'
-import { Activity, Point, UserSegment } from '../../types'
+import { Activity, Point, UserSegment, TERRAIN_FACTORS } from '../../types'
 import { pointsAPI, segmentsAPI, userSegmentsAPI } from '../../services/api'
 import ActivityMap from '../map/ActivityMap'
 import ElevationChart from '../charts/ElevationChart'
@@ -120,6 +120,7 @@ const AccordionSection = memo(({
 
 // Inline segment editor (for both create and edit)
 const SegmentEditor = memo(({
+  activity,
   timeRange,
   points,
   editingSegment,
@@ -140,6 +141,7 @@ const SegmentEditor = memo(({
   isInAdjustStartMode,
   isInAdjustEndMode
 }: {
+  activity: Activity
   timeRange: { start: string; end: string } | null
   points: Point[]
   editingSegment?: UserSegment
@@ -169,6 +171,8 @@ const SegmentEditor = memo(({
     terrainType: 'rest' | 'non-technical' | 'technical'
     difficulty?: string
     pitchCount?: number
+    terrainFactor?: number
+    packWeightOverride?: string
   }) => void
   isInSplitMode?: boolean
   isInAdjustStartMode?: boolean
@@ -188,15 +192,19 @@ const SegmentEditor = memo(({
   const [difficulty, setDifficulty] = useState(editingSegment?.difficulty || '')
   const [pitchCount, setPitchCount] = useState<number>(editingSegment?.pitch_count || 0)
 
+  // Pandolf equation inputs
+  const [terrainFactor, setTerrainFactor] = useState<number>(editingSegment?.terrain_factor ?? activity.terrain_factor ?? 1.1)
+  const [packWeightOverride, setPackWeightOverride] = useState<string>(editingSegment?.pack_weight_override_lbs?.toString() || '')
+
   // Initialize time range from editing segment if present
   const effectiveTimeRange = timeRange || (editingSegment ? { start: editingSegment.start_time, end: editingSegment.end_time } : null)
 
   // Notify parent when values change (for auto-save on close)
   useEffect(() => {
     if (editingSegment && onValuesChange) {
-      onValuesChange({ terrainType, difficulty, pitchCount })
+      onValuesChange({ terrainType, difficulty, pitchCount, terrainFactor, packWeightOverride })
     }
-  }, [terrainType, difficulty, pitchCount, editingSegment, onValuesChange])
+  }, [terrainType, difficulty, pitchCount, terrainFactor, packWeightOverride, editingSegment, onValuesChange])
 
   // Calculate segment metadata - MUST be called before any conditional returns
   const metadata = useMemo(() => {
@@ -296,98 +304,13 @@ const SegmentEditor = memo(({
     )
   }
 
-  // Early return if not enough points
-  if (!metadata) {
-    return (
-      <div className="text-sm text-gray-500">
-        Not enough points in selected range
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-3">
-      {/* Metadata Display */}
-      <div className="bg-gray-50 rounded-md p-3 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Ave. % Grade:</span>
-            <span className="font-medium text-gray-900">{metadata.avgGrade.toFixed(1)}%</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Ave Climb Rate:</span>
-            <span className="font-medium text-gray-900">{Math.round(metadata.climbRate)} ft/hr</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Distance:</span>
-            <span className="font-medium text-gray-900">{metadata.distance.toFixed(2)} mi</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Duration:</span>
-            <span className="font-medium text-gray-900">{Math.round(metadata.duration)} min</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Elevation Gain:</span>
-            <span className="font-medium text-gray-900">{Math.round(metadata.elevationGain)} ft</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Elevation Loss:</span>
-            <span className="font-medium text-gray-900">{Math.round(metadata.elevationLoss)} ft</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Avg Speed:</span>
-            <span className="font-medium text-gray-900">{metadata.avgSpeed.toFixed(1)} mph</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">% Inactive:</span>
-            <span className="font-medium text-gray-900">{metadata.percentInactive.toFixed(0)}%</span>
-          </div>
-        </div>
-
-        {/* Terrain Type Slider */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Terrain Type</label>
-        <input
-          type="range"
-          min="0"
-          max="2"
-          step="1"
-          value={terrainType === 'rest' ? 0 : terrainType === 'non-technical' ? 1 : 2}
-          onChange={(e) => {
-            const val = Number(e.target.value)
-            setTerrainType(val === 0 ? 'rest' : val === 1 ? 'non-technical' : 'technical')
-          }}
-          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-        />
-        <div className="flex justify-between text-xs text-gray-600 mt-2">
-          <span className={terrainType === 'rest' ? 'font-semibold text-gray-900' : ''}>Rest</span>
-          <span className={terrainType === 'non-technical' ? 'font-semibold text-gray-900' : ''}>Non-technical</span>
-          <span className={terrainType === 'technical' ? 'font-semibold text-gray-900' : ''}>Technical</span>
-        </div>
-      </div>
-
-      {/* Technical Climb Metadata - only shown for technical climbs */}
-      {metadata && metadata.segmentType === 'climb' && terrainType === 'technical' && (
-        <div className="space-y-3 pt-3 border-t border-gray-200">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Max Difficulty</label>
-            <input
-              type="text"
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-              placeholder="e.g. 5.10a"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Number of Pitches</label>
-            <input
-              type="number"
-              min="0"
-              value={pitchCount}
-              onChange={(e) => setPitchCount(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
-            />
-          </div>
+      {/* Warning for insufficient points */}
+      {!metadata && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+          <p className="text-sm text-yellow-800 font-medium">⚠️ Not enough points in selected range</p>
+          <p className="text-xs text-yellow-600 mt-1">Statistics unavailable, but you can still use segment actions below</p>
         </div>
       )}
 
@@ -489,6 +412,155 @@ const SegmentEditor = memo(({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Terrain Type Slider */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Terrain Type</label>
+        <input
+          type="range"
+          min="0"
+          max="2"
+          step="1"
+          value={terrainType === 'rest' ? 0 : terrainType === 'non-technical' ? 1 : 2}
+          onChange={(e) => {
+            const val = Number(e.target.value)
+            setTerrainType(val === 0 ? 'rest' : val === 1 ? 'non-technical' : 'technical')
+          }}
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+        />
+        <div className="flex justify-between text-xs text-gray-600 mt-2">
+          <span className={terrainType === 'rest' ? 'font-semibold text-gray-900' : ''}>Rest</span>
+          <span className={terrainType === 'non-technical' ? 'font-semibold text-gray-900' : ''}>Non-technical</span>
+          <span className={terrainType === 'technical' ? 'font-semibold text-gray-900' : ''}>Technical</span>
+        </div>
+      </div>
+
+      {/* Terrain Factor - only for non-technical segments */}
+      {terrainType === 'non-technical' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Terrain Factor</label>
+          <select
+            value={terrainFactor}
+            onChange={(e) => setTerrainFactor(Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+          >
+            {Object.entries(TERRAIN_FACTORS).map(([name, value]) => (
+              <option key={name} value={value}>
+                {name} ({value})
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Affects energy expenditure calculation
+          </p>
+        </div>
+      )}
+
+      {/* Pack Weight Override - only for non-technical segments */}
+      {terrainType === 'non-technical' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Pack Weight Override (lbs)</label>
+          <input
+            type="number"
+            value={packWeightOverride}
+            onChange={(e) => setPackWeightOverride(e.target.value)}
+            placeholder={activity.weight_carried_lbs ? `Default: ${activity.weight_carried_lbs} lbs` : 'No default set'}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+          />
+        </div>
+      )}
+
+      {/* Technical Climb Metadata - only shown for technical climbs */}
+      {metadata && metadata.segmentType === 'climb' && terrainType === 'technical' && (
+        <div className="space-y-3 pt-3 border-t border-gray-200">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Max Difficulty</label>
+            <input
+              type="text"
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value)}
+              placeholder="e.g. 5.10a"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Number of Pitches</label>
+            <input
+              type="number"
+              min="0"
+              value={pitchCount}
+              onChange={(e) => setPitchCount(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Segment Statistics Summary */}
+      {metadata && (
+        <div className="bg-gray-50 rounded-md p-3 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Ave. % Grade:</span>
+            <span className="font-medium text-gray-900">{metadata.avgGrade.toFixed(1)}%</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Ave Climb Rate:</span>
+            <span className="font-medium text-gray-900">{Math.round(metadata.climbRate)} ft/hr</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Distance:</span>
+            <span className="font-medium text-gray-900">{metadata.distance.toFixed(2)} mi</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Duration:</span>
+            <span className="font-medium text-gray-900">{Math.round(metadata.duration)} min</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Elevation Gain:</span>
+            <span className="font-medium text-gray-900">{Math.round(metadata.elevationGain)} ft</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Elevation Loss:</span>
+            <span className="font-medium text-gray-900">{Math.round(metadata.elevationLoss)} ft</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Avg Speed:</span>
+            <span className="font-medium text-gray-900">{metadata.avgSpeed.toFixed(1)} mph</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">% Inactive:</span>
+            <span className="font-medium text-gray-900">{metadata.percentInactive.toFixed(0)}%</span>
+          </div>
+
+          {/* Energy expenditure stats */}
+          {editingSegment && terrainType === 'technical' && (
+            <div className="text-sm text-gray-500 italic pt-2 border-t border-gray-200">
+              Energy not calculated for technical segments
+            </div>
+          )}
+          {editingSegment && terrainType !== 'technical' && editingSegment.energy_calculation_error && (
+            <div className="text-sm text-amber-600 pt-2 border-t border-gray-200">
+              {editingSegment.energy_calculation_error}
+            </div>
+          )}
+          {editingSegment && terrainType !== 'technical' && !editingSegment.energy_calculation_error && (
+            <>
+              {editingSegment.avg_power_watts && (
+                <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
+                  <span className="text-gray-600">Avg Power:</span>
+                  <span className="font-medium text-gray-900">{Math.round(editingSegment.avg_power_watts)} W</span>
+                </div>
+              )}
+              {editingSegment.total_energy_kcal && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Energy:</span>
+                  <span className="font-medium text-gray-900">{Math.round(editingSegment.total_energy_kcal)} kcal</span>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -781,6 +853,8 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
     terrainType: 'rest' | 'non-technical' | 'technical'
     difficulty?: string
     pitchCount?: number
+    terrainFactor?: number
+    packWeightOverride?: string
   } | null>(null)
 
   // Auto-enter edit mode when Clean Waypoints panel is opened
@@ -1147,7 +1221,9 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
           end_time: timeRange.end,
           is_technical: isTechnical,
           difficulty: difficulty || undefined,
-          pitch_count: pitchCount
+          pitch_count: pitchCount,
+          terrain_factor: terrainFactor,
+          pack_weight_override_lbs: packWeightOverride ? Number(packWeightOverride) : undefined
         })
         alert('Segment updated successfully!')
       } else {
@@ -1158,7 +1234,9 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
           end_time: timeRange.end,
           is_technical: isTechnical,
           difficulty: difficulty || undefined,
-          pitch_count: pitchCount
+          pitch_count: pitchCount,
+          terrain_factor: terrainFactor,
+          pack_weight_override_lbs: packWeightOverride ? Number(packWeightOverride) : undefined
         })
         alert('Segment created successfully!')
       }
@@ -1221,7 +1299,9 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
         end_time: timeRange.end,
         is_technical: isTechnical,
         difficulty: difficulty || undefined,
-        pitch_count: pitchCount
+        pitch_count: pitchCount,
+        terrain_factor: terrainFactor,
+        pack_weight_override_lbs: packWeightOverride ? Number(packWeightOverride) : undefined
       })
       alert('Segment created successfully!')
 
@@ -1257,6 +1337,8 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
     terrainType: 'rest' | 'non-technical' | 'technical'
     difficulty?: string
     pitchCount?: number
+    terrainFactor?: number
+    packWeightOverride?: string
   }) => {
     setCurrentEditingValues(values)
   }, [])
@@ -1303,7 +1385,9 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
             end_time: segmentTimeRange.end,
             is_technical: isTechnical,
             difficulty: currentEditingValues.difficulty || undefined,
-            pitch_count: currentEditingValues.pitchCount
+            pitch_count: currentEditingValues.pitchCount,
+            terrain_factor: currentEditingValues.terrainFactor,
+            pack_weight_override_lbs: currentEditingValues.packWeightOverride ? Number(currentEditingValues.packWeightOverride) : undefined
           })
           await fetchUserSegments()
         } catch (err) {
@@ -1317,7 +1401,56 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
       setSelectedSegmentId(null)
       setCurrentEditingValues(null)
     } else {
-      // Start editing this segment
+      // Save the currently editing segment before switching to a new one
+      if (editingSegmentId && currentEditingValues && segmentTimeRange) {
+        try {
+          // Determine segment_type based on terrain selection
+          let segmentType: 'climb' | 'descent' | 'flat' | 'rest'
+          let isTechnical: boolean
+
+          if (currentEditingValues.terrainType === 'rest') {
+            segmentType = 'rest'
+            isTechnical = false
+          } else {
+            // Auto-detect climb/descent/flat
+            const segmentPoints = points.filter(p => p.time >= segmentTimeRange.start && p.time <= segmentTimeRange.end)
+            let elevationGain = 0
+            let elevationLoss = 0
+            for (let i = 0; i < segmentPoints.length - 1; i++) {
+              const delta = segmentPoints[i + 1].elevation_ft - segmentPoints[i].elevation_ft
+              if (delta > 0) elevationGain += delta
+              else elevationLoss += Math.abs(delta)
+            }
+
+            if (elevationGain > 50 && elevationGain > elevationLoss * 1.5) {
+              segmentType = 'climb'
+            } else if (elevationLoss > 50 && elevationLoss > elevationGain * 1.5) {
+              segmentType = 'descent'
+            } else {
+              segmentType = 'flat'
+            }
+
+            isTechnical = currentEditingValues.terrainType === 'technical'
+          }
+
+          // Silently update without alert
+          await userSegmentsAPI.update(editingSegmentId, {
+            segment_type: segmentType,
+            start_time: segmentTimeRange.start,
+            end_time: segmentTimeRange.end,
+            is_technical: isTechnical,
+            difficulty: currentEditingValues.difficulty || undefined,
+            pitch_count: currentEditingValues.pitchCount,
+            terrain_factor: currentEditingValues.terrainFactor,
+            pack_weight_override_lbs: currentEditingValues.packWeightOverride ? Number(currentEditingValues.packWeightOverride) : undefined
+          })
+          await fetchUserSegments()
+        } catch (err) {
+          console.error('Error saving segment before switch:', err)
+        }
+      }
+
+      // Start editing the new segment
       setEditingSegmentId(segmentId)
       setCreatingSegment(false)
       const segment = userSegments.find(s => s.id === segmentId)
@@ -1568,6 +1701,7 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
                 creatingSegment={creatingSegment}
                 segmentEditor={
                   <SegmentEditor
+                    activity={activity}
                     timeRange={segmentTimeRange}
                     points={points}
                     editingSegment={editingSegmentId ? userSegments.find(s => s.id === editingSegmentId) : undefined}

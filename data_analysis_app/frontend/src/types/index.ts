@@ -16,7 +16,9 @@ export interface Activity {
   total_distance_mi: number | null;
   total_elevation_gain_ft: number | null;
   total_elevation_loss_ft: number | null;
+  body_weight_lbs: number | null;
   weight_carried_lbs: number | null;
+  terrain_factor: number | null;
   party_size: number | null;
   notes: string | null;
   is_planned: boolean;
@@ -63,6 +65,11 @@ export interface UserSegment {
   pitch_count: number | null;
   is_roped: boolean | null;
   rappel_count: number | null;
+  terrain_factor: number | null;
+  pack_weight_override_lbs: number | null;
+  avg_power_watts: number | null;
+  total_energy_kcal: number | null;
+  energy_calculation_error: string | null;
 }
 
 export interface SummaryStats {
@@ -102,6 +109,8 @@ export interface UserSegmentCreate {
   pitch_count?: number;
   is_roped?: boolean;
   rappel_count?: number;
+  terrain_factor?: number;
+  pack_weight_override_lbs?: number;
 }
 
 export interface UserSegmentUpdate {
@@ -113,4 +122,16 @@ export interface UserSegmentUpdate {
   pitch_count?: number;
   is_roped?: boolean;
   rappel_count?: number;
+  terrain_factor?: number;
+  pack_weight_override_lbs?: number;
 }
+
+// Terrain factor constants for Pandolf equation
+export const TERRAIN_FACTORS = {
+  'Paved Road': 1.0,
+  'Dirt Road': 1.1,
+  'Light Brush': 1.2,
+  'Heavy Brush': 1.5,
+  'Swampy Bog': 1.8,
+  'Loose Sand': 2.1,
+} as const;

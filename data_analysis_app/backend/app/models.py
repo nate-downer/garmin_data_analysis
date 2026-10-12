@@ -27,7 +27,9 @@ class Activity(Base):
     total_elevation_loss_ft = Column(Float)
 
     # User metadata
-    weight_carried_lbs = Column(Float)
+    body_weight_lbs = Column(Float)  # User's body weight for metabolic calculations
+    weight_carried_lbs = Column(Float)  # Pack/load weight
+    terrain_factor = Column(Float, default=1.1)  # Default terrain factor for segments (Dirt Road)
     party_size = Column(Integer)
     notes = Column(Text)
     is_planned = Column(Boolean, default=False, nullable=False)
@@ -122,6 +124,15 @@ class UserSegment(Base):
 
     # Technical descent metadata
     rappel_count = Column(Integer)
+
+    # Pandolf equation inputs (energy expenditure calculation)
+    terrain_factor = Column(Float)  # 1.0-2.1 (paved to sand), NULL = inherit from activity
+    pack_weight_override_lbs = Column(Float)  # Override activity.weight_carried_lbs
+
+    # Pandolf equation outputs (calculated and cached)
+    avg_power_watts = Column(Float)  # Average metabolic power
+    total_energy_kcal = Column(Float)  # Total energy expenditure
+    energy_calculation_error = Column(String)  # Error message if calculation failed
 
     # Relationships
     activity = relationship("Activity", back_populates="user_segments")

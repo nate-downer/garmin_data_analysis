@@ -8,7 +8,9 @@ from pydantic import BaseModel, Field
 class ActivityBase(BaseModel):
     activity_name: Optional[str] = None
     activity_type: Optional[str] = None
+    body_weight_lbs: Optional[float] = None
     weight_carried_lbs: Optional[float] = None
+    terrain_factor: Optional[float] = None
     party_size: Optional[int] = None
     notes: Optional[str] = None
     is_planned: Optional[bool] = None
@@ -24,7 +26,9 @@ class ActivityCreate(ActivityBase):
 
 class ActivityUpdate(BaseModel):
     activity_name: Optional[str] = None
+    body_weight_lbs: Optional[float] = None
     weight_carried_lbs: Optional[float] = None
+    terrain_factor: Optional[float] = None
     party_size: Optional[int] = None
     notes: Optional[str] = None
     is_planned: Optional[bool] = None
@@ -101,6 +105,8 @@ class UserSegmentBase(BaseModel):
     pitch_count: Optional[int] = None
     is_roped: Optional[bool] = None
     rappel_count: Optional[int] = None
+    terrain_factor: Optional[float] = None
+    pack_weight_override_lbs: Optional[float] = None
 
 
 class UserSegmentCreate(UserSegmentBase):
@@ -116,11 +122,16 @@ class UserSegmentUpdate(BaseModel):
     pitch_count: Optional[int] = None
     is_roped: Optional[bool] = None
     rappel_count: Optional[int] = None
+    terrain_factor: Optional[float] = None
+    pack_weight_override_lbs: Optional[float] = None
 
 
 class UserSegment(UserSegmentBase):
     id: int
     activity_id: str
+    avg_power_watts: Optional[float] = None
+    total_energy_kcal: Optional[float] = None
+    energy_calculation_error: Optional[str] = None
 
     class Config:
         from_attributes = True
