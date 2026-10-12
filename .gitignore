@@ -12,6 +12,10 @@ raw_garmin_data/
 data_pipeline/clean_data/
 data_pipeline/outputs/
 data_pipeline/models/
+scratch/data_pipeline/outputs/
+scratch/data_pipeline/clean_data/
+scratch/data_pipeline/models/
+scratch/clean_data/
 
 # Validation/output maps
 scratch/validation_maps/
