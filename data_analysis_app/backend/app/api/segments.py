@@ -1,19 +1,19 @@
 """Segments API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import pandas as pd
 import math
 from .. import models, schemas
 from ..database import get_db
-from ..services.calculations import calculate_segments, aggregate_activity_stats
+from ..services.calculations import calculate_segments, aggregate_activity_stats, calculate_segment_metrics
 from app.services.calculations import calculate_pandolf_energy
 
 router = APIRouter()
 
 
-def calculate_segment_energy(user_segment: models.UserSegment, activity: models.Activity, db: Session):
+def calculate_segment_energy(user_segment: models.UserSegment, activity: models.Activity, db: Session, points: List[models.Point] = None):
     """
     Helper function to calculate and save energy expenditure for a non-technical segment.
 
@@ -21,6 +21,7 @@ def calculate_segment_energy(user_segment: models.UserSegment, activity: models.
         user_segment: The segment to calculate energy for
         activity: The activity the segment belongs to
         db: Database session
+        points: Optional pre-fetched points list (for performance optimization)
     """
     if user_segment.is_technical:
         return  # Skip technical segments
@@ -29,11 +30,12 @@ def calculate_segment_energy(user_segment: models.UserSegment, activity: models.
         user_segment.energy_calculation_error = "Body weight required"
         return
 
-    # Get all points for the activity
-    points = db.query(models.Point).filter(
-        models.Point.activity_id == activity.activity_id,
-        models.Point.is_removed == False
-    ).order_by(models.Point.time).all()
+    # Use provided points or fetch from database
+    if points is None:
+        points = db.query(models.Point).filter(
+            models.Point.activity_id == activity.activity_id,
+            models.Point.is_removed == False
+        ).order_by(models.Point.time).all()
 
     # Determine pack weight (segment override or activity default)
     pack_weight = user_segment.pack_weight_override_lbs or activity.weight_carried_lbs or 0
@@ -54,6 +56,87 @@ def calculate_segment_energy(user_segment: models.UserSegment, activity: models.
     user_segment.avg_power_watts = result['avg_power_watts']
     user_segment.total_energy_kcal = result['total_energy_kcal']
     user_segment.energy_calculation_error = result['error']
+
+
+@router.get("/user-segments", response_model=List[schemas.UserSegmentWithActivity])
+def get_all_user_segments(
+    segment_type: Optional[str] = Query(None, description="Filter by type: climb, descent, flat, rest"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all user segments across all activities with enriched data.
+
+    Returns segments with activity context (activity name, date) and calculated metrics
+    (duration, distance, speed, grade, climb rate).
+
+    Query params:
+        segment_type: Optional filter for specific segment type (climb, descent, flat, rest)
+
+    Returns:
+        List of user segments with activity context and calculated metrics
+    """
+    # Query user segments with activity join
+    query = db.query(models.UserSegment, models.Activity).join(
+        models.Activity, models.UserSegment.activity_id == models.Activity.activity_id
+    )
+
+    # Filter by segment type if provided
+    if segment_type:
+        query = query.filter(models.UserSegment.segment_type == segment_type)
+
+    # Order by date (most recent first)
+    query = query.order_by(models.Activity.date.desc(), models.UserSegment.start_time)
+
+    results = query.all()
+
+    # Enrich segments with calculated metrics
+    enriched_segments = []
+    for user_segment, activity in results:
+        # Get points for this activity (reuse from cache if available)
+        points = db.query(models.Point).filter(
+            models.Point.activity_id == activity.activity_id,
+            models.Point.is_removed == False
+        ).order_by(models.Point.time).all()
+
+        # Calculate metrics
+        metrics = calculate_segment_metrics(
+            points=points,
+            start_time=user_segment.start_time,
+            end_time=user_segment.end_time
+        )
+
+        # Build enriched segment response
+        segment_dict = {
+            'id': user_segment.id,
+            'activity_id': user_segment.activity_id,
+            'segment_type': user_segment.segment_type,
+            'start_time': user_segment.start_time,
+            'end_time': user_segment.end_time,
+            'is_technical': user_segment.is_technical,
+            'difficulty': user_segment.difficulty,
+            'pitch_count': user_segment.pitch_count,
+            'is_roped': user_segment.is_roped,
+            'rappel_count': user_segment.rappel_count,
+            'terrain_factor': user_segment.terrain_factor,
+            'pack_weight_override_lbs': user_segment.pack_weight_override_lbs,
+            'avg_power_watts': user_segment.avg_power_watts,
+            'total_energy_kcal': user_segment.total_energy_kcal,
+            'energy_calculation_error': user_segment.energy_calculation_error,
+            # Activity context
+            'activity_name': activity.activity_name,
+            'activity_date': activity.date,
+            # Calculated metrics
+            'duration_sec': metrics['duration_sec'],
+            'distance_mi': metrics['distance_mi'],
+            'avg_speed_mph': metrics['avg_speed_mph'],
+            'avg_grade_percent': metrics['avg_grade_percent'],
+            'climb_rate_ft_per_hr': metrics['climb_rate_ft_per_hr'],
+            'elevation_gain_ft': metrics['elevation_gain_ft']
+        }
+
+        enriched_segments.append(schemas.UserSegmentWithActivity(**segment_dict))
+
+    return enriched_segments
 
 
 @router.get("/activities/{activity_id}/segments", response_model=List[schemas.Segment])
@@ -193,6 +276,20 @@ def create_user_segment(
 
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
+
+    # Validate that new segment doesn't overlap with existing segments
+    existing = db.query(models.UserSegment).filter(
+        models.UserSegment.activity_id == activity_id
+    ).order_by(models.UserSegment.start_time).all()
+
+    for seg in existing:
+        # Check for overlaps
+        if (segment.start_time < seg.end_time and
+            segment.end_time > seg.start_time):
+            raise HTTPException(
+                status_code=400,
+                detail=f"New segment overlaps with existing segment {seg.id}"
+            )
 
     # Create user segment
     user_segment = models.UserSegment(
@@ -418,11 +515,22 @@ def generate_segments(
     window_seconds = 60  # 2-minute centered window (60 sec before + 60 sec after)
     inactive_count = 0
 
+    # Optimized sliding window approach - O(n) instead of O(n²)
+    left = 0
     for i, point in enumerate(points):
         window_start = point.time - timedelta(seconds=window_seconds)
         window_end = point.time + timedelta(seconds=window_seconds)
 
-        window_points = [p for p in points if window_start <= p.time <= window_end]
+        # Move left pointer forward to window start
+        while left < len(points) and points[left].time < window_start:
+            left += 1
+
+        # Find right boundary
+        right = left
+        while right < len(points) and points[right].time <= window_end:
+            right += 1
+
+        window_points = points[left:right]
 
         if len(window_points) < 2:
             point.is_inactive = True
@@ -548,9 +656,10 @@ def generate_segments(
     db.commit()
 
     # Calculate energy for all non-technical segments
+    # Pass cached points to avoid N+1 query problem
     for segment in segment_objects:
         db.refresh(segment)  # Refresh to get the ID
-        calculate_segment_energy(segment, activity, db)
+        calculate_segment_energy(segment, activity, db, points=points)
 
     db.commit()
 
@@ -560,6 +669,67 @@ def generate_segments(
         "rest_segments": len(rest_segments),
         "inactive_points": inactive_count,
         "total_points": len(points)
+    }
+
+
+@router.post("/activities/{activity_id}/user-segments/repair-adjacency")
+def repair_segment_adjacency(
+    activity_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Detect and repair broken adjacency between segments.
+
+    Repairs segments by adjusting boundaries to ensure continuous coverage.
+    Returns report of what was fixed.
+    """
+    # Get all segments for activity, ordered by start time
+    segments = db.query(models.UserSegment).filter(
+        models.UserSegment.activity_id == activity_id
+    ).order_by(models.UserSegment.start_time).all()
+
+    if len(segments) < 2:
+        return {"repaired": 0, "gaps_fixed": []}
+
+    repairs = []
+
+    # Check each pair of consecutive segments
+    for i in range(len(segments) - 1):
+        current = segments[i]
+        next_seg = segments[i + 1]
+
+        # Check if there's a gap or overlap
+        if current.end_time != next_seg.start_time:
+            # Calculate midpoint to split the gap/overlap
+            gap_start = min(current.end_time, next_seg.start_time)
+            gap_end = max(current.end_time, next_seg.start_time)
+            midpoint = gap_start + (gap_end - gap_start) / 2
+
+            # Adjust boundaries to meet at midpoint
+            current.end_time = midpoint
+            next_seg.start_time = midpoint
+
+            # Recalculate energy for both
+            activity = db.query(models.Activity).filter(
+                models.Activity.activity_id == activity_id
+            ).first()
+            if activity:
+                calculate_segment_energy(current, activity, db)
+                calculate_segment_energy(next_seg, activity, db)
+
+            repairs.append({
+                "segment_1_id": current.id,
+                "segment_2_id": next_seg.id,
+                "gap_seconds": (gap_end - gap_start).total_seconds(),
+                "new_boundary": midpoint.isoformat()
+            })
+
+    if repairs:
+        db.commit()
+
+    return {
+        "repaired": len(repairs),
+        "gaps_fixed": repairs
     }
 
 
@@ -676,9 +846,10 @@ def merge_with_next(
 
     # Verify segments are adjacent
     if current.end_time != next_segment.start_time:
+        gap = (next_segment.start_time - current.end_time).total_seconds()
         raise HTTPException(
             status_code=400,
-            detail="Segments must be adjacent to merge"
+            detail=f"Segments must be adjacent to merge. Gap of {gap} seconds detected. Use 'Repair Adjacency' to fix."
         )
 
     # Create merged segment inheriting next segment's metadata
@@ -743,9 +914,10 @@ def merge_with_previous(
 
     # Verify segments are adjacent
     if previous.end_time != current.start_time:
+        gap = (current.start_time - previous.end_time).total_seconds()
         raise HTTPException(
             status_code=400,
-            detail="Segments must be adjacent to merge"
+            detail=f"Segments must be adjacent to merge. Gap of {gap} seconds detected. Use 'Repair Adjacency' to fix."
         )
 
     # Create merged segment inheriting previous segment's metadata
@@ -824,6 +996,22 @@ def adjust_boundary(
         previous.end_time = request.new_time
         segment.start_time = request.new_time
 
+        # Commit changes
+        db.commit()
+        db.refresh(segment)
+        db.refresh(previous)
+
+        # Recalculate energy for both affected segments
+        activity = db.query(models.Activity).filter(
+            models.Activity.activity_id == segment.activity_id
+        ).first()
+        if activity:
+            calculate_segment_energy(previous, activity, db)
+            calculate_segment_energy(segment, activity, db)
+            db.commit()
+            db.refresh(previous)
+            db.refresh(segment)
+
     elif request.boundary == "end":
         # Get next segment
         next_segment = db.query(models.UserSegment).filter(
@@ -848,7 +1036,20 @@ def adjust_boundary(
         segment.end_time = request.new_time
         next_segment.start_time = request.new_time
 
-    db.commit()
-    db.refresh(segment)
+        # Commit changes
+        db.commit()
+        db.refresh(segment)
+        db.refresh(next_segment)
+
+        # Recalculate energy for both affected segments
+        activity = db.query(models.Activity).filter(
+            models.Activity.activity_id == segment.activity_id
+        ).first()
+        if activity:
+            calculate_segment_energy(segment, activity, db)
+            calculate_segment_energy(next_segment, activity, db)
+            db.commit()
+            db.refresh(segment)
+            db.refresh(next_segment)
 
     return segment

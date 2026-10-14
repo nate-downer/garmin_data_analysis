@@ -115,8 +115,7 @@ class UserSegmentCreate(UserSegmentBase):
 
 class UserSegmentUpdate(BaseModel):
     segment_type: Optional[str] = Field(None, pattern="^(climb|descent|flat|rest)$")
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    # start_time and end_time removed - use adjust-boundary endpoint instead
     is_technical: Optional[bool] = None
     difficulty: Optional[str] = None
     pitch_count: Optional[int] = None
@@ -135,6 +134,21 @@ class UserSegment(UserSegmentBase):
 
     class Config:
         from_attributes = True
+
+
+class UserSegmentWithActivity(UserSegment):
+    """User segment with activity context and calculated metrics."""
+    # Activity context
+    activity_name: Optional[str] = None
+    activity_date: datetime
+
+    # Calculated metrics
+    duration_sec: float
+    distance_mi: Optional[float] = None
+    avg_speed_mph: Optional[float] = None
+    avg_grade_percent: Optional[float] = None
+    climb_rate_ft_per_hr: Optional[float] = None
+    elevation_gain_ft: Optional[float] = None
 
 
 class SplitSegmentRequest(BaseModel):

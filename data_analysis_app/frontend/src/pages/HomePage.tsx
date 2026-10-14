@@ -11,7 +11,15 @@ function HomePage() {
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
 
   const handleActivityChange = async () => {
+    // Save current scroll position
+    const scrollY = window.scrollY
+
     await Promise.all([refetchActivities(), refetchStats()])
+
+    // Restore scroll position after a brief delay to allow re-render
+    setTimeout(() => {
+      window.scrollTo(0, scrollY)
+    }, 0)
   }
 
   if (activitiesError) {

@@ -8,6 +8,7 @@ import type {
   Point,
   Segment,
   UserSegment,
+  UserSegmentWithActivity,
   SummaryStats,
   RemovePointsRequest,
   RestorePointsRequest,
@@ -110,9 +111,16 @@ export const segmentsAPI = {
 
 // User Segments API
 export const userSegmentsAPI = {
-  // List user-defined segments
+  // List user-defined segments for a specific activity
   list: async (activityId: string): Promise<UserSegment[]> => {
     const response = await apiClient.get<UserSegment[]>(`/activities/${activityId}/user-segments`);
+    return response.data;
+  },
+
+  // List all user segments across all activities with enriched data
+  listAll: async (segmentType?: string): Promise<UserSegmentWithActivity[]> => {
+    const params = segmentType ? { segment_type: segmentType } : {};
+    const response = await apiClient.get<UserSegmentWithActivity[]>('/user-segments', { params });
     return response.data;
   },
 
@@ -139,7 +147,8 @@ export const userSegmentsAPI = {
   // Generate segments automatically
   generate: async (activityId: string, force: boolean = false): Promise<any> => {
     const response = await apiClient.post(`/activities/${activityId}/segments/generate`, null, {
-      params: { force }
+      params: { force },
+      timeout: 120000 // 120 second timeout for segment generation
     });
     return response.data;
   },
@@ -174,6 +183,14 @@ export const userSegmentsAPI = {
     const response = await apiClient.patch<UserSegment>(
       `/user-segments/${segmentId}/adjust-boundary`,
       { boundary, new_time: newTime }
+    );
+    return response.data;
+  },
+
+  // Repair segment adjacency
+  repairAdjacency: async (activityId: string): Promise<{ repaired: number; gaps_fixed: any[] }> => {
+    const response = await apiClient.post(
+      `/activities/${activityId}/user-segments/repair-adjacency`
     );
     return response.data;
   },

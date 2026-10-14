@@ -281,6 +281,92 @@ def aggregate_activity_stats(segments_df: pd.DataFrame) -> Dict:
     }
 
 
+def calculate_segment_metrics(
+    points: List[models.Point],
+    start_time: datetime,
+    end_time: datetime
+) -> Dict[str, Optional[float]]:
+    """
+    Calculate derived metrics for a user segment from its points.
+
+    Args:
+        points: List of Point objects for the activity
+        start_time: Segment start time
+        end_time: Segment end time
+
+    Returns:
+        Dictionary with:
+            duration_sec: Segment duration in seconds
+            distance_mi: Total horizontal distance in miles
+            avg_speed_mph: Average speed in mph
+            avg_grade_percent: Average grade as percentage
+            climb_rate_ft_per_hr: Climb rate in ft/hr (elevation gain / duration)
+            elevation_gain_ft: Total elevation gain in feet
+    """
+    # Calculate duration
+    duration_sec = (end_time - start_time).total_seconds()
+
+    # Filter points to segment time range
+    segment_points = [p for p in points if start_time <= p.time <= end_time]
+
+    if len(segment_points) < 2:
+        return {
+            'duration_sec': duration_sec,
+            'distance_mi': None,
+            'avg_speed_mph': None,
+            'avg_grade_percent': None,
+            'climb_rate_ft_per_hr': None,
+            'elevation_gain_ft': None
+        }
+
+    # Calculate total horizontal distance and elevation change
+    total_distance_m = 0
+    total_elevation_gain_ft = 0
+
+    for i in range(len(segment_points) - 1):
+        p1 = segment_points[i]
+        p2 = segment_points[i + 1]
+
+        # Add horizontal distance
+        distance_m = haversine_distance(p1.lat, p1.lon, p2.lat, p2.lon)
+        total_distance_m += distance_m
+
+        # Add elevation gain (only positive changes)
+        elevation_delta_ft = p2.elevation_ft - p1.elevation_ft
+        if elevation_delta_ft > 0:
+            total_elevation_gain_ft += elevation_delta_ft
+
+    # Convert distance to miles
+    total_distance_mi = total_distance_m * 0.000621371
+
+    # Calculate average speed (mph)
+    if duration_sec > 0:
+        avg_speed_mph = (total_distance_mi / duration_sec) * 3600
+    else:
+        avg_speed_mph = None
+
+    # Calculate average grade (%)
+    if total_distance_mi > 0:
+        avg_grade_percent = (total_elevation_gain_ft / (total_distance_mi * 5280)) * 100
+    else:
+        avg_grade_percent = None
+
+    # Calculate climb rate (ft/hr)
+    if duration_sec > 0:
+        climb_rate_ft_per_hr = (total_elevation_gain_ft / duration_sec) * 3600
+    else:
+        climb_rate_ft_per_hr = None
+
+    return {
+        'duration_sec': duration_sec,
+        'distance_mi': total_distance_mi if total_distance_mi > 0 else None,
+        'avg_speed_mph': avg_speed_mph,
+        'avg_grade_percent': avg_grade_percent,
+        'climb_rate_ft_per_hr': climb_rate_ft_per_hr,
+        'elevation_gain_ft': total_elevation_gain_ft if total_elevation_gain_ft > 0 else None
+    }
+
+
 def decimate_points(points_df: pd.DataFrame, max_points: int = 1000) -> pd.DataFrame:
     """
     Downsample points for efficient rendering.

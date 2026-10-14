@@ -576,8 +576,11 @@ const ViewSegments = memo(({
   creatingSegment,
   segmentEditor,
   onGenerateSegments,
+  generatingSegments,
   onDeleteSegment,
-  onSelectSegment
+  onSelectSegment,
+  onRepairAdjacency,
+  repairingAdjacency
 }: {
   segments: UserSegment[]
   points: Point[]
@@ -586,8 +589,11 @@ const ViewSegments = memo(({
   creatingSegment: boolean
   segmentEditor: React.ReactNode
   onGenerateSegments: () => void
+  generatingSegments: boolean
   onDeleteSegment: (id: number) => void
   onSelectSegment: (id: number) => void
+  onRepairAdjacency: () => void
+  repairingAdjacency: boolean
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [showTopFade, setShowTopFade] = useState(false)
@@ -607,16 +613,6 @@ const ViewSegments = memo(({
 
   return (
     <div className="flex flex-col h-full space-y-3">
-      {/* Generate Segments Button */}
-      {!creatingSegment && (
-        <button
-          onClick={onGenerateSegments}
-          className="w-full px-4 py-2 bg-accent-600 text-white rounded-md font-medium hover:bg-accent-700"
-        >
-          Generate Segments
-        </button>
-      )}
-
       {/* New Segment Editor (shown when creating) */}
       {creatingSegment && (
         <div className="border border-blue-300 rounded-md p-3 bg-blue-50">
@@ -712,6 +708,49 @@ const ViewSegments = memo(({
         </div>
       ) : (
         <p className="text-sm text-gray-500">No segments yet. Create your first segment by drawing on the charts below.</p>
+      )}
+
+      {/* Action Buttons */}
+      {!creatingSegment && (
+        <div className={`flex gap-2 ${segments.length > 0 ? 'flex-row' : 'flex-col'}`}>
+          <button
+            onClick={onGenerateSegments}
+            disabled={generatingSegments}
+            className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {generatingSegments ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating...
+              </>
+            ) : (
+              segments.length > 0 ? 'Re-generate' : 'Generate Segments'
+            )}
+          </button>
+
+          {segments.length > 0 && (
+            <button
+              onClick={onRepairAdjacency}
+              disabled={repairingAdjacency}
+              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {repairingAdjacency ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Repairing...
+                </>
+              ) : (
+                'Fix Adjacency'
+              )}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -856,6 +895,8 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
     terrainFactor?: number
     packWeightOverride?: string
   } | null>(null)
+  const [generatingSegments, setGeneratingSegments] = useState(false)
+  const [repairingAdjacency, setRepairingAdjacency] = useState(false)
 
   // Auto-enter edit mode when Clean Waypoints panel is opened
   useEffect(() => {
@@ -1058,6 +1099,7 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
     }
 
     try {
+      setGeneratingSegments(true)
       const result = await userSegmentsAPI.generate(activity.activity_id, userSegments.length > 0)
       await fetchUserSegments()
       await fetchActivityData() // Reload points to get updated is_inactive flags
@@ -1065,6 +1107,26 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
     } catch (err: any) {
       console.error('Error generating segments:', err)
       alert(`Failed to generate segments: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setGeneratingSegments(false)
+    }
+  }
+
+  const handleRepairAdjacency = async () => {
+    try {
+      setRepairingAdjacency(true)
+      const result = await userSegmentsAPI.repairAdjacency(activity.activity_id)
+      await fetchUserSegments()
+      if (result.repaired > 0) {
+        alert(`Repaired ${result.repaired} gap(s) between segments`)
+      } else {
+        alert('No gaps detected - all segments are properly adjacent')
+      }
+    } catch (err: any) {
+      console.error('Error repairing adjacency:', err)
+      alert(`Failed to repair adjacency: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setRepairingAdjacency(false)
     }
   }
 
@@ -1214,11 +1276,9 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
       }
 
       if (editingSegmentId) {
-        // Update existing segment
+        // Update existing segment (boundary changes must use adjustBoundary API)
         await userSegmentsAPI.update(editingSegmentId, {
           segment_type: segmentType,
-          start_time: timeRange.start,
-          end_time: timeRange.end,
           is_technical: isTechnical,
           difficulty: difficulty || undefined,
           pitch_count: pitchCount,
@@ -1723,6 +1783,9 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
                   />
                 }
                 onGenerateSegments={handleGenerateSegments}
+                generatingSegments={generatingSegments}
+                onRepairAdjacency={handleRepairAdjacency}
+                repairingAdjacency={repairingAdjacency}
                 onDeleteSegment={handleDeleteSegment}
                 onSelectSegment={handleSelectSegment}
               />

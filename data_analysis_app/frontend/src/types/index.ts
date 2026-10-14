@@ -72,6 +72,20 @@ export interface UserSegment {
   energy_calculation_error: string | null;
 }
 
+export interface UserSegmentWithActivity extends UserSegment {
+  // Activity context
+  activity_name: string | null;
+  activity_date: string;
+
+  // Calculated metrics
+  duration_sec: number;
+  distance_mi: number | null;
+  avg_speed_mph: number | null;
+  avg_grade_percent: number | null;
+  climb_rate_ft_per_hr: number | null;
+  elevation_gain_ft: number | null;
+}
+
 export interface SummaryStats {
   total_activities: number;
   total_distance_mi: number;
@@ -115,8 +129,7 @@ export interface UserSegmentCreate {
 
 export interface UserSegmentUpdate {
   segment_type?: 'climb' | 'descent' | 'flat' | 'rest';
-  start_time?: string;
-  end_time?: string;
+  // start_time and end_time removed - use adjustBoundary API instead
   is_technical?: boolean;
   difficulty?: string;
   pitch_count?: number;

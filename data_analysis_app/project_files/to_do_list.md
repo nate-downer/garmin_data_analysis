@@ -138,9 +138,9 @@ The analysis should have the following sections:
 Additonal plots will be specified after the inital plots are added.
 
 ### Acceptance Criteria:
-- [ ] New Activity Analysis page is added
-- [ ] All specified plots have been added in a two column format
-- [ ] Additonal plots specified later have been added
+- [x] New Activity Analysis page is added
+- [x] All specified plots have been added in a two column format
+- [x] Additonal plots specified later have been added
 
 
 

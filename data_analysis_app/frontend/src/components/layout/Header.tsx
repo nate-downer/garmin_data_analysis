@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import UploadActivityModal from '../activity/UploadActivityModal'
 
 interface HeaderProps {
@@ -7,6 +8,9 @@ interface HeaderProps {
 
 function Header({ onActivityUploaded }: HeaderProps) {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isHomePage = location.pathname === '/'
 
   const handleUploadSuccess = () => {
     if (onActivityUploaded) {
@@ -32,9 +36,21 @@ function Header({ onActivityUploaded }: HeaderProps) {
               >
                 Add Activities
               </button>
-              <button className="btn-secondary">
-                View Analysis
-              </button>
+              {isHomePage ? (
+                <button
+                  className="btn-secondary"
+                  onClick={() => navigate('/analysis')}
+                >
+                  View Analysis
+                </button>
+              ) : (
+                <button
+                  className="btn-secondary"
+                  onClick={() => navigate('/')}
+                >
+                  Back to Activities
+                </button>
+              )}
               <button className="btn-secondary">
                 Build Model
               </button>

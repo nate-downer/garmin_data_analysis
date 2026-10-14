@@ -17,7 +17,12 @@ function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataF
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
-  const handleSave = async () => {
+  const handleSave = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
     try {
       setSaving(true)
       setMessage(null)
@@ -51,10 +56,6 @@ function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataF
       {/* Read-only Timezone Info */}
       {activity.timezone && (
         <div className="grid grid-cols-2 gap-3 pb-4 border-b border-gray-200">
-          <div>
-            <span className="text-xs font-medium text-gray-500">Timezone</span>
-            <p className="text-sm text-gray-700">{activity.timezone}</p>
-          </div>
           {activity.start_time_local && (
             <div>
               <span className="text-xs font-medium text-gray-500">Start Time (Local)</span>
@@ -66,6 +67,10 @@ function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataF
               </p>
             </div>
           )}
+          <div>
+            <span className="text-xs font-medium text-gray-500">Timezone</span>
+            <p className="text-sm text-gray-700 break-words">{activity.timezone}</p>
+          </div>
         </div>
       )}
 
@@ -170,6 +175,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataF
 
       {/* Save Button */}
       <button
+        type="button"
         onClick={handleSave}
         disabled={saving}
         className="w-full btn-primary disabled:opacity-50"
