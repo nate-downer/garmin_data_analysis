@@ -2,9 +2,10 @@
  * Generic scatter plot component for activity metrics.
  */
 import { memo, useMemo } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps } from 'recharts';
+import { ScatterChart, Scatter, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps, ComposedChart } from 'recharts';
 import { Activity } from '../../../types';
 import { formatDuration, formatDistance, formatElevation } from '../../../utils/formatters';
+import { fitExponentialSaturation } from '../../../utils/curveFitting';
 
 // Custom tooltip component
 const CustomTooltip = ({ active, payload, xLabel, yLabel, formatValue, xKey, yKey }: any) => {
@@ -40,9 +41,19 @@ interface ActivityScatterPlotProps {
   yKey: keyof Activity;
   xLabel: string;
   yLabel: string;
+  asymptoteMultiplier?: number; // Controls asymptote height (default 5)
+  slopeMultiplier?: number; // Controls initial slope (default 0.1)
 }
 
-function ActivityScatterPlot({ data, xKey, yKey, xLabel, yLabel }: ActivityScatterPlotProps) {
+function ActivityScatterPlot({
+  data,
+  xKey,
+  yKey,
+  xLabel,
+  yLabel,
+  asymptoteMultiplier = 5,
+  slopeMultiplier = 0.1
+}: ActivityScatterPlotProps) {
   // Transform data to scatter plot format
   const chartData = useMemo(() => {
     return data
@@ -54,6 +65,11 @@ function ActivityScatterPlot({ data, xKey, yKey, xLabel, yLabel }: ActivityScatt
         activityId: activity.activity_id,
       }));
   }, [data, xKey, yKey]);
+
+  // Fit exponential saturation curve (diminishing returns)
+  const trendline = useMemo(() => {
+    return fitExponentialSaturation(chartData, asymptoteMultiplier, slopeMultiplier, 1.5, 0.001);
+  }, [chartData, asymptoteMultiplier, slopeMultiplier]);
 
   if (chartData.length === 0) {
     return (
@@ -72,38 +88,57 @@ function ActivityScatterPlot({ data, xKey, yKey, xLabel, yLabel }: ActivityScatt
   };
 
   return (
-    <ResponsiveContainer width="100%" height={250}>
-      <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 30 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis
-          dataKey="x"
-          type="number"
-          name={xLabel}
-          tick={{ fontSize: 12 }}
-          stroke="#9ca3af"
-          label={{ value: xLabel, position: 'insideBottom', offset: -10, style: { fontSize: 12 } }}
-          tickFormatter={(value) => formatValue(value, xKey)}
-        />
-        <YAxis
-          dataKey="y"
-          type="number"
-          name={yLabel}
-          tick={{ fontSize: 12 }}
-          stroke="#9ca3af"
-          label={{ value: yLabel, angle: -90, position: 'insideLeft', offset: -15, style: { fontSize: 12, textAnchor: 'middle' } }}
-          tickFormatter={(value) => formatValue(value, yKey)}
-        />
-        <Tooltip
-          content={<CustomTooltip xLabel={xLabel} yLabel={yLabel} formatValue={formatValue} xKey={xKey} yKey={yKey} />}
-          cursor={{ strokeDasharray: '3 3' }}
-        />
-        <Scatter
-          data={chartData}
-          fill="#ea580c"
-          fillOpacity={0.6}
-        />
-      </ScatterChart>
-    </ResponsiveContainer>
+    <div className="relative">
+      {trendline && (
+        <div className="absolute top-0 right-0 text-xs text-gray-500 bg-white px-2 py-1 rounded border border-gray-200">
+          R² = {trendline.rSquared.toFixed(3)}
+        </div>
+      )}
+      <ResponsiveContainer width="100%" height={250}>
+        <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 30 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis
+            dataKey="x"
+            type="number"
+            name={xLabel}
+            tick={{ fontSize: 12 }}
+            stroke="#9ca3af"
+            label={{ value: xLabel, position: 'insideBottom', offset: -10, style: { fontSize: 12 } }}
+            tickFormatter={(value) => formatValue(value, xKey)}
+          />
+          <YAxis
+            dataKey="y"
+            type="number"
+            name={yLabel}
+            tick={{ fontSize: 12 }}
+            stroke="#9ca3af"
+            label={{ value: yLabel, angle: -90, position: 'insideLeft', offset: -15, style: { fontSize: 12, textAnchor: 'middle' } }}
+            tickFormatter={(value) => formatValue(value, yKey)}
+          />
+          <Tooltip
+            content={<CustomTooltip xLabel={xLabel} yLabel={yLabel} formatValue={formatValue} xKey={xKey} yKey={yKey} />}
+            cursor={{ strokeDasharray: '3 3' }}
+          />
+          {trendline && (
+            <Line
+              data={trendline.curvePoints}
+              type="monotone"
+              dataKey="y"
+              stroke="#9ca3af"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray="5 5"
+              isAnimationActive={false}
+            />
+          )}
+          <Scatter
+            data={chartData}
+            fill="#ea580c"
+            fillOpacity={0.6}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 

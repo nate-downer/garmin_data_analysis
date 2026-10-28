@@ -143,6 +143,45 @@ Additonal plots will be specified after the inital plots are added.
 - [x] Additonal plots specified later have been added
 
 
+## Milestone 0.7 - Model Creation
+
+In this milestone, I would like to create a heirarchical bayseian model that takes the data from the segments and predicts the time that each segment will take.
+
+My challenge is I have a lot of variable with a high degree of covarience:
+- Total elevation game
+- Total distance
+- Total energy expended
+
+I would like to use a heirarchical model to create a single factor out of these three factors adn then use that as a predictor in the lower level model.
+
+I also need to create six differnt models...
+- Time prediciton for technical climbing segments
+- " non-technical climbing segments
+- " flat segments
+- " non-technical descents
+- " technical descents
+- Total rest time as a function of total distance and elevation gain
+
+We will put all six of these models together to be able to predict the ammount of time it will take take complete an arbitrary trace later.
+
+
+### UI
+
+For the UI, I would like to add a new page that the user can access by clicking on the build model button at the top of the interface.
+
+I would like to generate a set of diagnostic plots for each of the six models. To start with, lets do two per model:
+- In the left column I would like to see the % of varriance explained by each var in the model (as a horizontal bar plot with error bars).
+- In the right column I would like to see the prediceted vs. actual time for each segment inthe model.
+
+I would like each model to have both plots.
+
+
+### UAC
+
+- [ ] The UI exists with two plots for each model
+- [ ] The heirarchical model is implemented as described
+
+
 
 ## Future Work:
 - [ ] Create comparison visualizations across segments and activities

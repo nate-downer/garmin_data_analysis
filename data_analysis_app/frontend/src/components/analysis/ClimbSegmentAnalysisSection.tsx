@@ -136,6 +136,7 @@ function ClimbSegmentAnalysisSection({ segments }: ClimbSegmentAnalysisSectionPr
             yLabel="Speed (mph)"
             xFormatter={formatGrade}
             yFormatter={formatSpeed}
+            curveType="decay"
           />
         </div>
 
@@ -150,6 +151,7 @@ function ClimbSegmentAnalysisSection({ segments }: ClimbSegmentAnalysisSectionPr
             yLabel="Climb Rate (ft/hr)"
             xFormatter={formatPower}
             yFormatter={formatClimbRate}
+            showTrendline={false}
           />
         </div>
 
@@ -164,6 +166,7 @@ function ClimbSegmentAnalysisSection({ segments }: ClimbSegmentAnalysisSectionPr
             yLabel="Elevation Gain (ft)"
             xFormatter={formatEnergy}
             yFormatter={formatElevation}
+            showTrendline={false}
           />
         </div>
 
@@ -178,6 +181,7 @@ function ClimbSegmentAnalysisSection({ segments }: ClimbSegmentAnalysisSectionPr
             yLabel="Climb Rate (ft/hr)"
             xFormatter={formatDistance}
             yFormatter={formatClimbRate}
+            showTrendline={false}
           />
         </div>
       </div>
