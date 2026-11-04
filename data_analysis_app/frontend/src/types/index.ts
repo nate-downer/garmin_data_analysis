@@ -108,10 +108,14 @@ export interface RestorePointsRequest {
 
 export interface ActivityUpdate {
   activity_name?: string;
+  body_weight_lbs?: number;
   weight_carried_lbs?: number;
+  terrain_factor?: number;
   party_size?: number;
   notes?: string;
   is_planned?: boolean;
+  // Only settable for planned routes - shifts every point/segment time by the same delta
+  start_time_local?: string;
 }
 
 export interface UserSegmentCreate {
@@ -138,6 +142,90 @@ export interface UserSegmentUpdate {
   terrain_factor?: number;
   pack_weight_override_lbs?: number;
 }
+
+// Model fitting (Milestone 0.7 - hierarchical Bayesian time-prediction models)
+export interface FitStatus {
+  state: 'idle' | 'running' | 'done' | 'error';
+  step_index: number;
+  step_label: string | null;
+  total_steps: number;
+  error: string | null;
+  updated_at: string | null;
+  run_id: string | null;
+}
+
+export interface ModelRunSummary {
+  run_id: string;
+  created_at: string;
+  n_activities_total: number;
+  rmse_pct: Record<string, number>;
+  is_predictable: boolean;
+}
+
+// Time prediction (Milestone 0.8 - predicting planned routes)
+export interface PredictionRequest {
+  run_id: string;
+  start_time: string;
+}
+
+export interface PredictionSegmentResult {
+  segment_id: number;
+  segment_type_5: string;
+  distance_mi: number;
+  elevation_gain_ft: number;
+  mean_predicted_min: number;
+  draws_min: number[];
+}
+
+export interface PredictionCumulativePoint {
+  cumulative_distance_mi: number;
+  cumulative_time_min: number;
+  kind: 'start' | 'segment' | 'rest';
+  label: string;
+}
+
+export interface PredictionResult {
+  segments: PredictionSegmentResult[];
+  total_mean_min: number;
+  total_distribution_min: number[];
+  cumulative_points: PredictionCumulativePoint[];
+}
+
+export interface VarianceExplainedEntry {
+  variable: string;
+  label: string;
+  median_pct: number;
+  low_pct: number;
+  high_pct: number;
+}
+
+export interface PredictedVsActualPoint {
+  label: string;
+  activity_name: string;
+  predicted_min: number;
+  actual_min: number;
+}
+
+export interface ModelDiagnostics {
+  label: string;
+  n_segments: number;
+  r_squared: number;
+  rmse_min: number;
+  rmse_pct_of_mean: number;
+  variance_explained: VarianceExplainedEntry[];
+  predicted_vs_actual: PredictedVsActualPoint[];
+}
+
+export type AllModelDiagnostics = Record<string, ModelDiagnostics>;
+
+export const MODEL_GROUP_ORDER = [
+  'technical_climb',
+  'nontechnical_climb',
+  'flat',
+  'nontechnical_descent',
+  'technical_descent',
+  'rest',
+] as const;
 
 // Terrain factor constants for Pandolf equation
 export const TERRAIN_FACTORS = {

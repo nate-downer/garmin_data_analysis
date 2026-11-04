@@ -5,17 +5,45 @@ import { activitiesAPI } from '../../services/api'
 interface ActivityMetadataFormProps {
   activity: Activity
   onActivityUpdated?: () => void
+  onDeleted?: () => void
 }
 
-function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataFormProps) {
+function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: ActivityMetadataFormProps) {
   const [activityName, setActivityName] = useState(activity.activity_name || '')
   const [bodyWeight, setBodyWeight] = useState(activity.body_weight_lbs || '')
   const [weightCarried, setWeightCarried] = useState(activity.weight_carried_lbs || '')
   const [terrainFactor, setTerrainFactor] = useState(activity.terrain_factor || 1.1)
   const [partySize, setPartySize] = useState(activity.party_size || '')
   const [notes, setNotes] = useState(activity.notes || '')
+  const [startTimeLocal, setStartTimeLocal] = useState(activity.start_time_local ? activity.start_time_local.slice(0, 16) : '')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
+  const handleDelete = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    const label = activity.activity_name || activity.activity_id
+    if (!window.confirm(`Delete "${label}"? This permanently removes the activity and all its points and segments. This cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setDeleting(true)
+      setMessage(null)
+      await activitiesAPI.delete(activity.activity_id)
+      if (onDeleted) {
+        onDeleted()
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to delete activity' })
+      console.error('Error deleting activity:', error)
+      setDeleting(false)
+    }
+  }
 
   const handleSave = async (e?: React.MouseEvent) => {
     if (e) {
@@ -34,6 +62,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataF
         terrain_factor: terrainFactor,
         party_size: partySize ? Number(partySize) : undefined,
         notes: notes || undefined,
+        ...(activity.is_planned && startTimeLocal ? { start_time_local: startTimeLocal } : {}),
       })
 
       setMessage({ type: 'success', text: 'Saved successfully!' })
@@ -53,8 +82,23 @@ function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataF
 
   return (
     <div className="space-y-4">
-      {/* Read-only Timezone Info */}
-      {activity.timezone && (
+      {/* Start Time / Timezone - editable start time for planned routes, read-only for recorded ones */}
+      {activity.is_planned ? (
+        <div className="pb-4 border-b border-gray-200">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Start Time
+          </label>
+          <input
+            type="datetime-local"
+            value={startTimeLocal}
+            onChange={(e) => setStartTimeLocal(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Hypothetical start time for this planned route - shifts all its points and segments.
+          </p>
+        </div>
+      ) : activity.timezone && (
         <div className="grid grid-cols-2 gap-3 pb-4 border-b border-gray-200">
           {activity.start_time_local && (
             <div>
@@ -173,15 +217,25 @@ function ActivityMetadataForm({ activity, onActivityUpdated }: ActivityMetadataF
         </div>
       </div>
 
-      {/* Save Button */}
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className="w-full btn-primary disabled:opacity-50"
-      >
-        {saving ? 'Saving...' : 'Save Metadata'}
-      </button>
+      {/* Save / Delete Buttons */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || deleting}
+          className="flex-1 btn-primary disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Metadata'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={saving || deleting}
+          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {deleting ? 'Deleting...' : 'Delete Activity'}
+        </button>
+      </div>
 
       {/* Message */}
       {message && (

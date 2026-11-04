@@ -5,6 +5,7 @@ import ActivityMap from '../map/ActivityMap'
 import ElevationChart from '../charts/ElevationChart'
 import SpeedChart from '../charts/SpeedChart'
 import ActivityMetadataForm from './ActivityMetadataForm'
+import PredictTimePanel from './PredictTimePanel'
 
 // Helper function to get segment colors
 const getSegmentColors = (segmentType: 'climb' | 'descent' | 'flat' | 'rest') => {
@@ -865,16 +866,17 @@ const EditControls = memo(({
 interface ActivityEditorProps {
   activity: Activity
   onActivityUpdated?: () => void
+  onDeleted?: () => void
 }
 
-function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
+function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEditorProps) {
   const [points, setPoints] = useState<Point[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [selectedPointIndices, setSelectedPointIndices] = useState<number[]>([])
   const [removing, setRemoving] = useState(false)
-  const [activePanel, setActivePanel] = useState<'metadata' | 'waypoints' | 'segments' | null>('metadata')
+  const [activePanel, setActivePanel] = useState<'metadata' | 'waypoints' | 'segments' | 'predict' | null>('metadata')
 
   // Segment creation/editing state
   const [creatingSegment, setCreatingSegment] = useState(false)
@@ -1743,7 +1745,7 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
               isOpen={activePanel === 'metadata'}
               onToggle={() => setActivePanel(activePanel === 'metadata' ? null : 'metadata')}
             >
-              <ActivityMetadataForm activity={activity} onActivityUpdated={onActivityUpdated} />
+              <ActivityMetadataForm activity={activity} onActivityUpdated={onActivityUpdated} onDeleted={onDeleted} />
             </AccordionSection>
 
             <AccordionSection
@@ -1807,6 +1809,17 @@ function ActivityEditor({ activity, onActivityUpdated }: ActivityEditorProps) {
                 onApplyMaxSpeed={handleApplyMaxSpeed}
               />
             </AccordionSection>
+
+            {activity.is_planned && (
+              <AccordionSection
+                id="predict"
+                title="Predict Time"
+                isOpen={activePanel === 'predict'}
+                onToggle={() => setActivePanel(activePanel === 'predict' ? null : 'predict')}
+              >
+                <PredictTimePanel activity={activity} />
+              </AccordionSection>
+            )}
           </div>
         </div>
       </div>

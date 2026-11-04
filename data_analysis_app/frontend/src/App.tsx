@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import AnalysisPage from './pages/AnalysisPage'
+import ModelDiagnosticsPage from './pages/ModelDiagnosticsPage'
+import PlanRoutesPage from './pages/PlanRoutesPage'
 
 function App() {
   useEffect(() => {
@@ -21,6 +23,8 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
+          <Route path="/build-model" element={<ModelDiagnosticsPage />} />
+          <Route path="/plan-routes" element={<PlanRoutesPage />} />
         </Routes>
       </div>
     </BrowserRouter>

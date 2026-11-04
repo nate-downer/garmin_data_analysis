@@ -1,17 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { gpxAPI, userSegmentsAPI } from '../../services/api'
 
 interface UploadActivityModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (result: { activityId: string; isPlanned: boolean }) => void
+  defaultIsPlanned?: boolean
 }
 
-function UploadActivityModal({ isOpen, onClose, onSuccess }: UploadActivityModalProps) {
+function UploadActivityModal({ isOpen, onClose, onSuccess, defaultIsPlanned = false }: UploadActivityModalProps) {
   const [file, setFile] = useState<File | null>(null)
-  const [isPlanned, setIsPlanned] = useState(false)
+  const [isPlanned, setIsPlanned] = useState(defaultIsPlanned)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Re-sync the planned/actual default each time the modal opens (e.g. "Plan Activity" vs "Add Activities")
+  useEffect(() => {
+    if (isOpen) {
+      setIsPlanned(defaultIsPlanned)
+    }
+  }, [isOpen, defaultIsPlanned])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -54,8 +62,8 @@ function UploadActivityModal({ isOpen, onClose, onSuccess }: UploadActivityModal
 
       // Reset form and close
       setFile(null)
-      setIsPlanned(false)
-      onSuccess()
+      setIsPlanned(defaultIsPlanned)
+      onSuccess({ activityId: result.activity_id, isPlanned })
       onClose()
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to upload activity')
@@ -68,7 +76,7 @@ function UploadActivityModal({ isOpen, onClose, onSuccess }: UploadActivityModal
   const handleClose = () => {
     if (!uploading) {
       setFile(null)
-      setIsPlanned(false)
+      setIsPlanned(defaultIsPlanned)
       setError(null)
       onClose()
     }

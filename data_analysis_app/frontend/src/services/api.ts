@@ -15,6 +15,11 @@ import type {
   ActivityUpdate,
   UserSegmentCreate,
   UserSegmentUpdate,
+  FitStatus,
+  AllModelDiagnostics,
+  ModelRunSummary,
+  PredictionRequest,
+  PredictionResult,
 } from '../types';
 
 // Base API URL - reads from environment variable
@@ -208,6 +213,41 @@ export const gpxAPI = {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  },
+};
+
+// Model fitting API
+export const modelsAPI = {
+  // Start fitting the hierarchical time-prediction models (runs as a background task)
+  fit: async (): Promise<{ status: string }> => {
+    const response = await apiClient.post('/models/fit');
+    return response.data;
+  },
+
+  // Poll current fit progress
+  getFitStatus: async (): Promise<FitStatus> => {
+    const response = await apiClient.get<FitStatus>('/models/fit-status');
+    return response.data;
+  },
+
+  // List historical fit runs, newest first
+  getRuns: async (): Promise<ModelRunSummary[]> => {
+    const response = await apiClient.get<ModelRunSummary[]>('/models/runs');
+    return response.data;
+  },
+
+  // Fetch diagnostics for one specific run
+  getRunDiagnostics: async (runId: string): Promise<AllModelDiagnostics> => {
+    const response = await apiClient.get<AllModelDiagnostics>(`/models/runs/${runId}/diagnostics`);
+    return response.data;
+  },
+};
+
+// Time prediction API (Milestone 0.8)
+export const predictionsAPI = {
+  predict: async (activityId: string, request: PredictionRequest): Promise<PredictionResult> => {
+    const response = await apiClient.post<PredictionResult>(`/activities/${activityId}/predict`, request);
     return response.data;
   },
 };

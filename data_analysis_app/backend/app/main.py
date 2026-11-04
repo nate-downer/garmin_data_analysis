@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .api import activities, gpx, points, segments
+from .api import activities, gpx, points, segments, model_fitting, predictions
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -28,6 +28,8 @@ app.include_router(activities.router, prefix="/api", tags=["activities"])
 app.include_router(gpx.router, prefix="/api/gpx", tags=["gpx"])
 app.include_router(points.router, prefix="/api", tags=["points"])
 app.include_router(segments.router, prefix="/api", tags=["segments"])
+app.include_router(model_fitting.router, prefix="/api", tags=["models"])
+app.include_router(predictions.router, prefix="/api", tags=["predictions"])
 
 
 @app.get("/")

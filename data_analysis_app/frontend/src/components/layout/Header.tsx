@@ -6,16 +6,23 @@ interface HeaderProps {
   onActivityUploaded?: () => void
 }
 
+const NAV_ITEMS = [
+  { label: 'Edit Activities', path: '/' },
+  { label: 'View Analysis', path: '/analysis' },
+  { label: 'Build Models', path: '/build-model' },
+  { label: 'Plan Routes', path: '/plan-routes' },
+]
+
 function Header({ onActivityUploaded }: HeaderProps) {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const isHomePage = location.pathname === '/'
 
-  const handleUploadSuccess = () => {
+  const handleUploadSuccess = ({ activityId, isPlanned }: { activityId: string; isPlanned: boolean }) => {
     if (onActivityUploaded) {
       onActivityUploaded()
     }
+    navigate(isPlanned ? '/plan-routes' : '/', { state: { selectedActivityId: activityId } })
   }
 
   return (
@@ -24,8 +31,8 @@ function Header({ onActivityUploaded }: HeaderProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Garmin Data Analysis</h1>
-              <p className="mt-1 text-sm text-gray-500">GPS Trace Viewer & Editor</p>
+              <h1 className="text-3xl font-bold text-gray-900">Mountain G.O.A.T.</h1>
+              <p className="mt-1 text-sm text-gray-500">Generative Outdoor Activity Tracker</p>
             </div>
 
             {/* Action Buttons */}
@@ -34,29 +41,17 @@ function Header({ onActivityUploaded }: HeaderProps) {
                 className="btn-primary"
                 onClick={() => setIsUploadModalOpen(true)}
               >
-                Add Activities
+                Add Activity
               </button>
-              {isHomePage ? (
+              {NAV_ITEMS.map((item) => (
                 <button
-                  className="btn-secondary"
-                  onClick={() => navigate('/analysis')}
+                  key={item.path}
+                  className={location.pathname === item.path ? 'btn-nav-active' : 'btn-nav'}
+                  onClick={() => navigate(item.path)}
                 >
-                  View Analysis
+                  {item.label}
                 </button>
-              ) : (
-                <button
-                  className="btn-secondary"
-                  onClick={() => navigate('/')}
-                >
-                  Back to Activities
-                </button>
-              )}
-              <button className="btn-secondary">
-                Build Model
-              </button>
-              <button className="btn-secondary">
-                Plan Activity
-              </button>
+              ))}
             </div>
           </div>
         </div>

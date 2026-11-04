@@ -178,14 +178,59 @@ I would like each model to have both plots.
 
 ### UAC
 
-- [ ] The UI exists with two plots for each model
-- [ ] The heirarchical model is implemented as described
+- [x] The UI exists with two plots for each model
+- [x] The heirarchical model is implemented as described
 
+
+## Milestone 0.8 - Add time prediciton interface
+
+In this milestone I would like to add the UI for predicting the time for future routes based on the results of a selected model.
+
+There are a few key parts to this:
+
+### Interface for creating the segments for the test routes
+
+We need an edit page (similar to the one for recorded activities) that allows the user to clean and add segments to routes that will be used for predictions.
+
+In addition to the segment editing the user should be able to set the following variables for the time prediction:
+- Group size
+- Pack weight
+- User weight
+- Start time
+
+I would also like the user to be able to pick the model they want to use for the prediciton from a list of all models.
+
+### Back end integration for the predictions
+
+I would like to run several differnt predictions for each segment, and the get the mean predicted time for each segment.
+
+I would also like to so the same thing for rest times.
+
+### Prediction visualizations
+
+I want to make use of the baysean frame work to generate a prediction for each segment that shows the distribution of times. I would like to start with two visualizations:
+- A distribution plot showing the mean total time and distribution around the mean
+- A line plot showing the total distance (on the x axis) and total time (on the y axis) showing the average time prediction for each segment connected to each other. This should have the effect of showing cumulative time over distance. I would like to add a "rest" segment after each segment that is 1 / (segment count - 1) of the total rest time.
+
+
+### UAT
+
+- [ ] Adds interface for editing the segments traces used for projections
+- [ ] Adds back end integration for making time predicitons
+- [ ] Adds prediction parameters in the edit interface
+- [ ] Adds visualizations showing the distribution of total time predictions and a line plot showing time as a funciton of distance.
+
+- [ ] Add plots with distribution of active time (ignoring rests)
+- [ ] Add plot with time as a funciton of elevation gain
+- [ ] Make it possible to run time predictions on past activities and show the actual vs. predicted.
+- [ ] Improve the plots by changing the colors past 1 SD from the mean and adding segment based colors
+- [ ] Move the plots into the main body of the thing
+- [ ] Make it easier to see the projected summit time / fix time zones
 
 
 ## Future Work:
-- [ ] Create comparison visualizations across segments and activities
-- [ ] Create a prediciton algorithim using a baysian model.
-- [ ] Allow the user to predict their time on other routes.
+- [x] Create comparison visualizations across segments and activities
+- [x] Create a prediciton algorithim using a baysian model.
+- [x] Allow the user to predict their time on other routes.
 - [ ] Figure out if total elevation gain is bugged / ensure total calculations work better
 - [ ] Make the dot field more fun / interactive

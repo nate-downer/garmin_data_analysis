@@ -32,6 +32,8 @@ class ActivityUpdate(BaseModel):
     party_size: Optional[int] = None
     notes: Optional[str] = None
     is_planned: Optional[bool] = None
+    # Only settable for planned routes - shifts every point/segment time by the same delta
+    start_time_local: Optional[datetime] = None
 
 
 class Activity(ActivityBase):

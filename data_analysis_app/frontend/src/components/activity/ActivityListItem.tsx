@@ -13,9 +13,10 @@ interface ActivityListItemProps {
   isSelected: boolean
   onClick: () => void
   onActivityUpdated?: () => void
+  onDeleted?: () => void
 }
 
-function ActivityListItem({ activity, isSelected, onClick, onActivityUpdated }: ActivityListItemProps) {
+function ActivityListItem({ activity, isSelected, onClick, onActivityUpdated, onDeleted }: ActivityListItemProps) {
   return (
     <div className="relative">
       {/* Connector dot - centered on the vertical line */}
@@ -113,7 +114,7 @@ function ActivityListItem({ activity, isSelected, onClick, onActivityUpdated }: 
             className="mt-6 pt-6 border-t border-gray-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <ActivityEditor activity={activity} onActivityUpdated={onActivityUpdated} />
+            <ActivityEditor activity={activity} onActivityUpdated={onActivityUpdated} onDeleted={onDeleted} />
           </div>
         )}
       </div>

@@ -14,6 +14,12 @@ pydantic-settings==2.1.0
 pandas==2.2.0
 numpy==1.26.3
 
+# Bayesian modeling (Milestone 0.7 - time prediction models)
+pymc==5.19.1
+arviz==0.20.0
+matplotlib==3.9.4
+h5py==3.16.0
+
 # GPX parsing
 gpxpy==1.6.2
 

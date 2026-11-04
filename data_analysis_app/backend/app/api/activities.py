@@ -44,8 +44,34 @@ def update_activity(
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    # Update fields
     update_data = activity_update.model_dump(exclude_unset=True)
+
+    # Start time is special-cased: shift every point/segment time by the same delta
+    # instead of just overwriting the activity's own timestamp, so downstream
+    # extraction (hour-of-day, etc.) stays consistent with the new schedule.
+    new_start_time_local = update_data.pop("start_time_local", None)
+    if new_start_time_local is not None:
+        if not activity.is_planned:
+            raise HTTPException(status_code=400, detail="Start time can only be edited for planned routes")
+
+        old_reference = activity.start_time_local or activity.start_time_utc
+        delta = new_start_time_local - old_reference
+
+        activity.start_time_utc = activity.start_time_utc + delta
+        activity.start_time_local = new_start_time_local
+
+        for point in db.query(models.Point).filter(models.Point.activity_id == activity_id).all():
+            point.time = point.time + delta
+
+        for segment in db.query(models.Segment).filter(models.Segment.activity_id == activity_id).all():
+            segment.start_time = segment.start_time + delta
+            segment.end_time = segment.end_time + delta
+
+        for user_segment in db.query(models.UserSegment).filter(models.UserSegment.activity_id == activity_id).all():
+            user_segment.start_time = user_segment.start_time + delta
+            user_segment.end_time = user_segment.end_time + delta
+
+    # Update remaining fields
     for field, value in update_data.items():
         setattr(activity, field, value)
 

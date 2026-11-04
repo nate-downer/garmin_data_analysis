@@ -59,6 +59,14 @@
     @apply btn bg-secondary-200 text-secondary-800 hover:bg-secondary-300 focus:ring-secondary-500;
   }
 
+  .btn-nav {
+    @apply btn bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-400;
+  }
+
+  .btn-nav-active {
+    @apply btn bg-gray-700 text-white hover:bg-gray-800 focus:ring-gray-500;
+  }
+
   .card {
     @apply bg-white rounded-lg shadow-md p-6;
   }
