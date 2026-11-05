@@ -9,19 +9,32 @@ variable is the median / 5th-95th percentile of that share across draws.
 import numpy as np
 import xarray as xr
 
+from .locomotion_model import SEGMENT_TYPES, EFFORT_SEGMENT_TYPES, _tod_harmonics
+
 VARIABLE_LABELS = {
     "effort_factor": "Effort factor (distance + elevation)",
     "load_ratio": "Load ratio (pack/body weight)",
     "terrain_factor": "Terrain factor",
     "cum_distance_prior_mi": "Cumulative distance so far",
     "cum_elevation_prior_ft": "Cumulative elevation so far",
-    "hour_of_day": "Time of day",
+    "tod_modifier": "Time of day",
     "activity_offset": "Activity-level variation",
     "total_distance_mi": "Total distance",
     "total_elevation_gain_ft": "Total elevation gain",
     "party_size": "Party size",
     "is_hiking": "Activity type: hiking",
     "is_running": "Activity type: running",
+    "pct_technical_elevation_gain": "% elevation gain from technical climbing",
+    "exp_new_route_new_skills": "Experience: New Route + New Skills",
+    "exp_somewhat_familiar_route": "Experience: Somewhat Familiar Route",
+    "exp_familiar_route": "Experience: Familiar Route",
+    "diff_4th_class": "Difficulty: 4th Class",
+    "diff_5th_easy": "Difficulty: 5th Easy",
+    "diff_5th_moderate": "Difficulty: 5th Moderate",
+    "diff_5th_hard": "Difficulty: 5th Hard",
+    "elevation_change_tech_climb": "Elevation gain (technical climb)",
+    "elevation_change_tech_descent": "Elevation loss (technical descent)",
+    "pitch_count_tech_climb": "Number of pitches",
 }
 
 TYPE_LABELS = {
@@ -77,62 +90,98 @@ def _variance_explained(term_vars: dict) -> list:
     return rows
 
 
-def single_type_diagnostics(fit_result: dict, type_name: str) -> dict:
-    """Diagnostics for one independently-fit segment-type model (no type dimension to slice)."""
+def pooled_diagnostics(fit_result: dict) -> dict:
+    """
+    Diagnostics for the pooled locomotion model, keyed by segment_type_5 - same output
+    shape per type as the old single_type_diagnostics, just sliced from one shared fit
+    instead of coming from 5 separate fits.
+    """
     idata = fit_result["idata"]
     df = fit_result["df"]
     covariate_matrix = fit_result["covariate_matrix"]
     activity_idx = fit_result["activity_idx"]
-
+    type_idx = fit_result["type_idx"]
     used_covariates = fit_result["used_covariates"]
+    n_cov = len(used_covariates)
 
     posterior = idata.posterior
-    alpha = _flatten(posterior["alpha"])  # (S,)
-    beta = _flatten(posterior["beta"])  # (S,)
+    alpha_type_all = _flatten(posterior["alpha_type"])  # (S, n_types)
+    beta_type_all = _flatten(posterior["beta_type"])  # (S, n_types)
     gamma = _flatten(posterior["gamma"])  # (S, n_cov)
-    eta = _flatten(posterior["eta"])  # (S, n)
+    tod_a1 = _flatten(posterior["tod_a1"])  # (S,)
+    tod_b1 = _flatten(posterior["tod_b1"])
+    tod_a2 = _flatten(posterior["tod_a2"])
+    tod_b2 = _flatten(posterior["tod_b2"])
+    activity_offset = _flatten(posterior["activity_offset"])  # (S, n_activities)
 
-    n_cov = len(used_covariates)
+    log_effort_std = fit_result["log_effort_stats"].transform(df["log_effort"].to_numpy())
+    sin1, cos1, sin2, cos2 = _tod_harmonics(df["hour_of_day"].to_numpy())
+
     segment_ids = df["segment_id"].to_numpy()
     activity_names = df["activity_name"].to_numpy()
     duration_sec = df["duration_sec"].to_numpy()
 
-    eta_term = beta[:, None] * eta  # (S, n)
+    out = {}
+    for t_pos, type_name in enumerate(SEGMENT_TYPES):
+        mask = type_idx == t_pos
+        if not mask.any():
+            continue
 
-    gamma_expanded = gamma[:, None, :]  # (S, 1, n_cov)
-    cov_terms = gamma_expanded * covariate_matrix[None, :, :]  # (S, n, n_cov)
+        alpha_t = alpha_type_all[:, t_pos]  # (S,)
 
-    term_vars = {"effort_factor": eta_term.var(axis=1)}
-    for j in range(n_cov):
-        term_vars[used_covariates[j]] = cov_terms[:, :, j].var(axis=1)
+        gamma_expanded = gamma[:, None, :]  # (S, 1, n_cov)
+        cov_terms = gamma_expanded * covariate_matrix[None, mask, :]  # (S, n_t, n_cov)
 
-    mu = alpha[:, None] + eta_term + cov_terms.sum(axis=2)
+        tod_term = (
+            tod_a1[:, None] * sin1[None, mask] + tod_b1[:, None] * cos1[None, mask]
+            + tod_a2[:, None] * sin2[None, mask] + tod_b2[:, None] * cos2[None, mask]
+        )  # (S, n_t)
 
-    if fit_result.get("include_activity_offset", True):
-        activity_offset = _flatten(posterior["activity_offset"])  # (S, n_activities)
-        activity_term = activity_offset[:, activity_idx]  # (S, n)
-        term_vars["activity_offset"] = activity_term.var(axis=1)
-        mu = mu + activity_term
-    predicted_min = np.exp(np.median(mu, axis=0)) / 60.0
-    actual_min = duration_sec / 60.0
+        activity_term = activity_offset[:, activity_idx[mask]]  # (S, n_t)
 
-    predicted_vs_actual = [
-        {
-            "label": f"segment_{segment_ids[k]}",
-            "activity_name": str(activity_names[k]),
-            "predicted_min": float(predicted_min[k]),
-            "actual_min": float(actual_min[k]),
+        term_vars = {
+            "tod_modifier": tod_term.var(axis=1),
+            "activity_offset": activity_term.var(axis=1),
         }
-        for k in range(len(df))
-    ]
 
-    return {
-        "label": TYPE_LABELS[type_name],
-        "n_segments": int(len(df)),
-        "variance_explained": _variance_explained(term_vars),
-        "predicted_vs_actual": predicted_vs_actual,
-        **_fit_summary_stats(predicted_vs_actual),
-    }
+        # technical_climb/technical_descent have no effort term at all - their
+        # duration comes entirely from the elevation_change_tech_*/
+        # pitch_count_tech_climb covariates in the generic loop below.
+        if type_name in EFFORT_SEGMENT_TYPES:
+            beta_t = beta_type_all[:, EFFORT_SEGMENT_TYPES.index(type_name)]  # (S,)
+            effort_term = beta_t[:, None] * log_effort_std[None, mask]  # (S, n_t)
+            term_vars["effort_factor"] = effort_term.var(axis=1)
+        else:
+            effort_term = 0.0
+
+        for j in range(n_cov):
+            term_vars[used_covariates[j]] = cov_terms[:, :, j].var(axis=1)
+
+        mu = alpha_t[:, None] + effort_term + cov_terms.sum(axis=2) + tod_term + activity_term
+        predicted_min = np.exp(np.median(mu, axis=0)) / 60.0
+        actual_min = duration_sec[mask] / 60.0
+
+        predicted_vs_actual = [
+            {
+                "label": f"segment_{sid}",
+                "activity_name": str(aname),
+                "predicted_min": float(pmin),
+                "actual_min": float(amin),
+            }
+            for sid, aname, pmin, amin in zip(
+                segment_ids[mask], activity_names[mask], predicted_min, actual_min
+            )
+        ]
+
+        out[type_name] = {
+            "label": TYPE_LABELS[type_name],
+            "n_segments": int(mask.sum()),
+            "variance_explained": _variance_explained(term_vars),
+            "predicted_vs_actual": predicted_vs_actual,
+            **_fit_summary_stats(predicted_vs_actual),
+        }
+
+    return out
 
 
 def rest_diagnostics(fit_result: dict) -> dict:

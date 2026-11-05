@@ -215,17 +215,65 @@ I want to make use of the baysean frame work to generate a prediction for each s
 
 ### UAT
 
-- [ ] Adds interface for editing the segments traces used for projections
-- [ ] Adds back end integration for making time predicitons
-- [ ] Adds prediction parameters in the edit interface
-- [ ] Adds visualizations showing the distribution of total time predictions and a line plot showing time as a funciton of distance.
+- [x] Adds interface for editing the segments traces used for projections
+- [x] Adds back end integration for making time predicitons
+- [x] Adds prediction parameters in the edit interface
+- [x] Adds visualizations showing the distribution of total time predictions and a line plot showing time as a funciton of distance.
+- [x] Add plots with distribution of active time (ignoring rests)
+- [x] Add plot with time as a funciton of elevation gain
+- [x] Make it possible to run time predictions on past activities and show the actual vs. predicted.
+- [x] Improve the plots by changing the colors past 1 SD from the mean and adding segment based colors
+- [x] Move the plots into the main body of the thing
+- [x] Make it easier to see the projected summit time / fix time zones in plots
 
-- [ ] Add plots with distribution of active time (ignoring rests)
-- [ ] Add plot with time as a funciton of elevation gain
-- [ ] Make it possible to run time predictions on past activities and show the actual vs. predicted.
-- [ ] Improve the plots by changing the colors past 1 SD from the mean and adding segment based colors
-- [ ] Move the plots into the main body of the thing
-- [ ] Make it easier to see the projected summit time / fix time zones
+
+## Milestone 0.9 - Improve the Model Formula and Accuracy
+
+Ok there are a number of improvements to be made to the formula for the model and overall accuracy.
+
+I want to switch back to a structure where the same "effort" model is used across all the differnt sub models instead of running this seperatly. To do this we will need to find a way to seed up the running of the model becuase right now it is too slow to work this way.
+
+### Decision Point 1 - How do we speed up the model
+
+### Updates to Model structure
+
+In terms of the structure, I would like various components of the effort model to use diminishing returns curves (similar to the ones implemented in the analysis section) such that the ammount of effor increases exponentially as the distance and elevation increases.
+
+I would then like the synthetic "effort" metric to have a linear relationship with time in the second layer of models.
+
+### Updates to the Equation
+
+For the equation of the model, I would like to do something like:
+
+time = effort * (load ratio + terrain_factor + party_size + activity_type + cumulative_distance + cumulative_elevation + tod_modifier + experience_modifier)
+
+Note that I think all the other factors should scale with relative effort (because a heavy backpack will slow you down in porportion to how far you have to carry it).
+
+I added two new terms here that should also be shared across models:
+- tod_modifier is the time of day modifier. this should be a serries to two harmonic sine waves that fit across the 24 hour period and generally express how much faster or slower people move based on the time of day.
+- experience_modifier. I would like to add a new factor that the user selects once for each activity called "Experienc level". This should have 4 levels:
+  - New Route + New Skills
+  - New Route - Familier Skills
+  - Somewhat Familier Route
+  - Familier Route
+
+The idea is that people will move faster on terrain that they are used to, with gear they are used to.
+
+Note that we will need to update the UI so that the user is prompted to set this for each activity and prediction. When we maek the back end changes for this, we can use "New Route - Familier skills" as the default.
+
+
+### Improving rest time
+
+For the rest time model, I would also like to add a factor that represents the % of elevation gain in a route that is from technical climbing. Technical climbing tends to have lots of rest built in (belays etc.) so I would expect there to be less dedicated rest time on activities with a lot of technical climbing relative to other activity types.
+
+### UAC
+
+- [ ] Model is re-structured as heirarchical
+- [ ] Model back end is sped up substantailly (somehow)
+- [ ] New equation is implemented across all the appropriate models
+- [ ] New UI is added for the use to ad the level of expecince with the route
+- [ ] New rest time factor is implemented
+
 
 
 ## Future Work:
@@ -234,3 +282,5 @@ I want to make use of the baysean frame work to generate a prediction for each s
 - [x] Allow the user to predict their time on other routes.
 - [ ] Figure out if total elevation gain is bugged / ensure total calculations work better
 - [ ] Make the dot field more fun / interactive
+- [ ] Make the algorithims faster
+- [ ] Pubish and host app

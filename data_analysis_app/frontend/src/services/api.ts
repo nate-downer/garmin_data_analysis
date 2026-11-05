@@ -220,8 +220,8 @@ export const gpxAPI = {
 // Model fitting API
 export const modelsAPI = {
   // Start fitting the hierarchical time-prediction models (runs as a background task)
-  fit: async (): Promise<{ status: string }> => {
-    const response = await apiClient.post('/models/fit');
+  fit: async (nRecentActivities?: number | null): Promise<{ status: string }> => {
+    const response = await apiClient.post('/models/fit', { n_recent_activities: nRecentActivities ?? null });
     return response.data;
   },
 

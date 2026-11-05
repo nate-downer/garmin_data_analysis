@@ -302,6 +302,7 @@ def calculate_segment_metrics(
             avg_grade_percent: Average grade as percentage
             climb_rate_ft_per_hr: Climb rate in ft/hr (elevation gain / duration)
             elevation_gain_ft: Total elevation gain in feet
+            elevation_loss_ft: Total elevation loss in feet (positive number)
     """
     # Calculate duration
     duration_sec = (end_time - start_time).total_seconds()
@@ -316,12 +317,14 @@ def calculate_segment_metrics(
             'avg_speed_mph': None,
             'avg_grade_percent': None,
             'climb_rate_ft_per_hr': None,
-            'elevation_gain_ft': None
+            'elevation_gain_ft': None,
+            'elevation_loss_ft': None
         }
 
     # Calculate total horizontal distance and elevation change
     total_distance_m = 0
     total_elevation_gain_ft = 0
+    total_elevation_loss_ft = 0
 
     for i in range(len(segment_points) - 1):
         p1 = segment_points[i]
@@ -331,10 +334,12 @@ def calculate_segment_metrics(
         distance_m = haversine_distance(p1.lat, p1.lon, p2.lat, p2.lon)
         total_distance_m += distance_m
 
-        # Add elevation gain (only positive changes)
+        # Add elevation gain/loss (only the matching-sign changes go to each total)
         elevation_delta_ft = p2.elevation_ft - p1.elevation_ft
         if elevation_delta_ft > 0:
             total_elevation_gain_ft += elevation_delta_ft
+        elif elevation_delta_ft < 0:
+            total_elevation_loss_ft += abs(elevation_delta_ft)
 
     # Convert distance to miles
     total_distance_mi = total_distance_m * 0.000621371
@@ -363,7 +368,8 @@ def calculate_segment_metrics(
         'avg_speed_mph': avg_speed_mph,
         'avg_grade_percent': avg_grade_percent,
         'climb_rate_ft_per_hr': climb_rate_ft_per_hr,
-        'elevation_gain_ft': total_elevation_gain_ft if total_elevation_gain_ft > 0 else None
+        'elevation_gain_ft': total_elevation_gain_ft if total_elevation_gain_ft > 0 else None,
+        'elevation_loss_ft': total_elevation_loss_ft if total_elevation_loss_ft > 0 else None
     }
 
 

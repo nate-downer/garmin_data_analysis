@@ -33,6 +33,8 @@ class Activity(Base):
     party_size = Column(Integer)
     notes = Column(Text)
     is_planned = Column(Boolean, default=False, nullable=False)
+    # Route/skill familiarity - shared covariate in the pooled locomotion duration model
+    experience_level = Column(String, nullable=False, default="New Route - Familiar Skills")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

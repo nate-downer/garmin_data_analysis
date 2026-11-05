@@ -22,6 +22,8 @@ function ModelDiagnosticsPage() {
     startFit,
   } = useModelFitting();
   const [starting, setStarting] = useState(false);
+  const [limitToRecent, setLimitToRecent] = useState(false);
+  const [nRecentActivities, setNRecentActivities] = useState('10');
 
   const isRunning = fitStatus?.state === 'running' || starting;
   const progressPct = fitStatus && fitStatus.total_steps > 0
@@ -31,7 +33,7 @@ function ModelDiagnosticsPage() {
   const handleFitClick = async () => {
     setStarting(true);
     try {
-      await startFit();
+      await startFit(limitToRecent ? Number(nRecentActivities) : null);
     } finally {
       setStarting(false);
     }
@@ -58,6 +60,27 @@ function ModelDiagnosticsPage() {
               >
                 {isRunning ? 'Fitting…' : 'Fit Models'}
               </button>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={limitToRecent}
+                  onChange={(e) => setLimitToRecent(e.target.checked)}
+                  disabled={isRunning}
+                />
+                Limit to most recent
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={nRecentActivities}
+                onChange={(e) => setNRecentActivities(e.target.value)}
+                disabled={!limitToRecent || isRunning}
+                className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-accent-500"
+              />
+              <span>activities</span>
             </div>
 
             {isRunning && (

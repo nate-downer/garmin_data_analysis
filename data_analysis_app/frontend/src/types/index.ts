@@ -22,6 +22,7 @@ export interface Activity {
   party_size: number | null;
   notes: string | null;
   is_planned: boolean;
+  experience_level: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +115,7 @@ export interface ActivityUpdate {
   party_size?: number;
   notes?: string;
   is_planned?: boolean;
+  experience_level?: string;
   // Only settable for planned routes - shifts every point/segment time by the same delta
   start_time_local?: string;
 }
@@ -158,6 +160,7 @@ export interface ModelRunSummary {
   run_id: string;
   created_at: string;
   n_activities_total: number;
+  n_recent_activities_filter: number | null;
   rmse_pct: Record<string, number>;
   is_predictable: boolean;
 }
@@ -166,6 +169,9 @@ export interface ModelRunSummary {
 export interface PredictionRequest {
   run_id: string;
   start_time: string;
+  body_weight_lbs: number;
+  pack_weight_lbs: number;
+  party_size: number;
 }
 
 export interface PredictionSegmentResult {
@@ -182,13 +188,36 @@ export interface PredictionCumulativePoint {
   cumulative_time_min: number;
   kind: 'start' | 'segment' | 'rest';
   label: string;
+  elevation_ft: number;
+}
+
+export interface ActualCumulativePoint {
+  cumulative_distance_mi: number;
+  cumulative_time_min: number;
+  kind: 'start' | 'segment' | 'rest';
+  label: string;
 }
 
 export interface PredictionResult {
   segments: PredictionSegmentResult[];
   total_mean_min: number;
+  active_mean_min: number;
+  rest_mean_min: number;
+  summit_time: string | null;
+  finish_time: string;
+  active_distribution_min: number[];
   total_distribution_min: number[];
   cumulative_points: PredictionCumulativePoint[];
+  summit_time_of_day_min: number[] | null;
+  summit_mean_time_of_day_min: number | null;
+  finish_time_of_day_min: number[];
+  finish_mean_time_of_day_min: number;
+  sunrise_time_of_day_min: number | null;
+  sunset_time_of_day_min: number | null;
+  actual_total_min: number | null;
+  actual_summit_time_of_day_min: number | null;
+  actual_finish_time_of_day_min: number | null;
+  actual_cumulative_points: ActualCumulativePoint[] | null;
 }
 
 export interface VarianceExplainedEntry {
@@ -236,3 +265,20 @@ export const TERRAIN_FACTORS = {
   'Swampy Bog': 1.8,
   'Loose Sand': 2.1,
 } as const;
+
+// Route/skill familiarity levels - shared covariate in the pooled time-prediction model
+export const EXPERIENCE_LEVELS = [
+  'New Route + New Skills',
+  'New Route - Familiar Skills',
+  'Somewhat Familiar Route',
+  'Familiar Route',
+] as const;
+
+// Technical climb difficulty levels - covariate in the pooled time-prediction model
+export const CLIMB_DIFFICULTIES = [
+  '3rd Class',
+  '4th Class',
+  '5th Easy',
+  '5th Moderate',
+  '5th Hard',
+] as const;

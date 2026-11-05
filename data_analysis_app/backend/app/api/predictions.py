@@ -16,6 +16,11 @@ router = APIRouter()
 class PredictionRequest(BaseModel):
     run_id: str
     start_time: str  # ISO datetime, treated as a hypothetical/request-scoped value
+    # Request-scoped, not saved to the activity - lets the user try multiple
+    # combinations quickly without round-tripping through Activity Details.
+    body_weight_lbs: float
+    pack_weight_lbs: float
+    party_size: float
 
 
 @router.post("/activities/{activity_id}/predict")
@@ -31,6 +36,11 @@ def predict_activity_time(activity_id: str, request: PredictionRequest, db: Sess
         raise HTTPException(status_code=400, detail=f"Invalid start_time: {exc}")
 
     try:
-        return predict_route(db, activity_id, request.run_id, start_time)
+        return predict_route(
+            db, activity_id, request.run_id, start_time,
+            body_weight_lbs=request.body_weight_lbs,
+            pack_weight_lbs=request.pack_weight_lbs,
+            party_size=request.party_size,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

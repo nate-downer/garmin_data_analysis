@@ -1,16 +1,18 @@
 /**
- * Predict Time panel - lets the user pick a fitted model run and a hypothetical
- * start time, then shows per-segment and total trip time predictions with
- * Bayesian uncertainty surfaced as distributions.
+ * Predict Time panel - lets the user pick a fitted model run, a hypothetical
+ * start time, and trip parameters, then shows per-segment time predictions.
+ * The distribution/cumulative charts themselves render in the main plot window
+ * (see ActivityEditor), not here - this panel just drives the prediction and
+ * shows the numeric summary.
  */
 import { useEffect, useState } from 'react'
 import { Activity, ModelRunSummary, PredictionResult } from '../../types'
 import { modelsAPI, predictionsAPI } from '../../services/api'
-import PredictionDistributionChart from '../charts/analysis/PredictionDistributionChart'
-import PredictionCumulativeChart from '../charts/analysis/PredictionCumulativeChart'
 
 interface PredictTimePanelProps {
   activity: Activity
+  result: PredictionResult | null
+  onResultChange: (result: PredictionResult | null) => void
 }
 
 const formatMinutes = (value: number) => {
@@ -19,17 +21,24 @@ const formatMinutes = (value: number) => {
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
 }
 
+const formatTimeOfDay = (isoTime: string) =>
+  new Date(isoTime).toLocaleTimeString([], { timeStyle: 'short' })
+
 const defaultStartTime = (activity: Activity) =>
   activity.start_time_local ? activity.start_time_local.slice(0, 16) : ''
 
-function PredictTimePanel({ activity }: PredictTimePanelProps) {
+function PredictTimePanel({ activity, result, onResultChange }: PredictTimePanelProps) {
   const [runs, setRuns] = useState<ModelRunSummary[]>([])
   const [runsLoading, setRunsLoading] = useState(true)
   const [selectedRunId, setSelectedRunId] = useState<string>('')
   const [startTime, setStartTime] = useState(defaultStartTime(activity))
+  const [bodyWeight, setBodyWeight] = useState(activity.body_weight_lbs ? String(activity.body_weight_lbs) : '')
+  const [packWeight, setPackWeight] = useState(activity.weight_carried_lbs ? String(activity.weight_carried_lbs) : '')
+  const [partySize, setPartySize] = useState(activity.party_size ? String(activity.party_size) : '1')
   const [predicting, setPredicting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<PredictionResult | null>(null)
+
+  const canPredict = Boolean(selectedRunId && startTime && bodyWeight && packWeight && partySize)
 
   useEffect(() => {
     modelsAPI.getRuns().then((allRuns) => {
@@ -43,15 +52,18 @@ function PredictTimePanel({ activity }: PredictTimePanelProps) {
   }, [])
 
   const handlePredict = async () => {
-    if (!selectedRunId || !startTime) return
+    if (!canPredict) return
     try {
       setPredicting(true)
       setError(null)
       const data = await predictionsAPI.predict(activity.activity_id, {
         run_id: selectedRunId,
         start_time: startTime,
+        body_weight_lbs: Number(bodyWeight),
+        pack_weight_lbs: Number(packWeight),
+        party_size: Number(partySize),
       })
-      setResult(data)
+      onResultChange(data)
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to generate prediction')
       console.error('Prediction error:', err)
@@ -98,15 +110,48 @@ function PredictTimePanel({ activity }: PredictTimePanelProps) {
           onChange={(e) => setStartTime(e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
         />
-        <p className="text-xs text-gray-500 mt-1">
-          Group size, pack weight, and body weight come from Activity Details above.
-        </p>
       </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Body Weight (lbs)</label>
+          <input
+            type="number"
+            value={bodyWeight}
+            onChange={(e) => setBodyWeight(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Pack Weight (lbs)</label>
+          <input
+            type="number"
+            value={packWeight}
+            onChange={(e) => setPackWeight(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="0"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Party Size</label>
+          <input
+            type="number"
+            value={partySize}
+            onChange={(e) => setPartySize(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+            placeholder="1"
+          />
+        </div>
+      </div>
+      <p className="text-xs text-gray-500 -mt-2">
+        These apply to this prediction only - try different combinations freely.
+      </p>
 
       <button
         type="button"
         onClick={handlePredict}
-        disabled={predicting || !selectedRunId || !startTime}
+        disabled={predicting || !canPredict}
         className="w-full btn-primary disabled:opacity-50"
       >
         {predicting ? 'Predicting...' : 'Predict Time'}
@@ -115,21 +160,36 @@ function PredictTimePanel({ activity }: PredictTimePanelProps) {
       {error && <div className="text-sm text-red-600">{error}</div>}
 
       {result && (
-        <div className="space-y-6 pt-2">
+        <div className="space-y-4 pt-2">
           <div className="text-center">
-            <span className="text-sm text-gray-500">Predicted Total Time: </span>
-            <span className="text-lg font-semibold text-gray-800">{formatMinutes(result.total_mean_min)}</span>
+            <div className="text-xs text-gray-500">Predicted Total Time</div>
+            <div className="text-2xl font-semibold text-gray-800">{formatMinutes(result.total_mean_min)}</div>
           </div>
 
-          <div>
-            <h4 className="text-sm font-semibold mb-2 text-gray-700">Total Time Distribution</h4>
-            <PredictionDistributionChart draws={result.total_distribution_min} meanMin={result.total_mean_min} />
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <div className="text-xs text-gray-500">Predicted Active Time</div>
+              <div className="text-base font-medium text-gray-700">{formatMinutes(result.active_mean_min)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Predicted Finish Time</div>
+              <div className="text-base font-medium text-gray-700">{formatTimeOfDay(result.finish_time)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Predicted Rest Time</div>
+              <div className="text-base font-medium text-gray-700">{formatMinutes(result.rest_mean_min)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Predicted Summit Time</div>
+              <div className="text-base font-medium text-gray-700">
+                {result.summit_time !== null ? formatTimeOfDay(result.summit_time) : 'No climbing segments'}
+              </div>
+            </div>
           </div>
 
-          <div>
-            <h4 className="text-sm font-semibold mb-2 text-gray-700">Cumulative Time vs. Distance</h4>
-            <PredictionCumulativeChart points={result.cumulative_points} />
-          </div>
+          <p className="text-xs text-gray-500 text-center">
+            See the distribution and cumulative-time charts in the plot window above.
+          </p>
 
           <div>
             <h4 className="text-sm font-semibold mb-2 text-gray-700">Per-Segment Predictions</h4>

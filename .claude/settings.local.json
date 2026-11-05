@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./venv/bin/python \"/private/tmp/claude-501/-Users-nathaniel-Data-Science-personal-garmin-data-analysis/b6e5ce09-5d07-41a4-989c-03d6cd170db6/scratchpad/test_numpyro_sampler.py\")"
+    ]
+  }
+}

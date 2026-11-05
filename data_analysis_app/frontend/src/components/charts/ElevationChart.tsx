@@ -10,18 +10,19 @@ interface ElevationChartProps {
   highlightSegment?: { start: string; end: string; color: string } | null
   segmentMode?: boolean
   xDomain?: [number | string, number | string]
+  timezone?: string | null
 }
 
-function ElevationChart({ points, editMode = false, onPointClick, isPointSelected = [], highlightSegment = null, segmentMode = false, xDomain = ['dataMin', 'dataMax'] }: ElevationChartProps) {
+function ElevationChart({ points, editMode = false, onPointClick, isPointSelected = [], highlightSegment = null, segmentMode = false, xDomain = ['dataMin', 'dataMax'], timezone }: ElevationChartProps) {
   // Prepare data for chart - use timestamp for x-axis (memoized for performance)
   const data = useMemo(() => {
     return points.map((point, index) => ({
       index, // Keep index for click handling
       elevation: Math.round(point.elevation_ft),
       timestamp: new Date(point.time).getTime(),
-      time: new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date(point.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone ?? undefined }),
     }))
-  }, [points])
+  }, [points, timezone])
 
   // Calculate elevation range with 5% padding for better y-axis scaling
   const elevationDomain = useMemo(() => {
@@ -63,7 +64,7 @@ function ElevationChart({ points, editMode = false, onPointClick, isPointSelecte
             allowDataOverflow={true}
             tick={{ fontSize: 12 }}
             stroke="#9ca3af"
-            tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone ?? undefined })}
             scale="time"
           />
           <YAxis
@@ -76,7 +77,7 @@ function ElevationChart({ points, editMode = false, onPointClick, isPointSelecte
           position={{ y: -15 }}
           contentStyle={{ fontSize: 11, backgroundColor: 'rgba(255, 255, 255, 0.95)', border: 'none', padding: '4px 8px' }}
           formatter={(value: number, name: string, props: any) => {
-            const time = new Date(props.payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            const time = new Date(props.payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone ?? undefined })
             return [`${value} ft at ${time}`, '']
           }}
           labelFormatter={() => ''}

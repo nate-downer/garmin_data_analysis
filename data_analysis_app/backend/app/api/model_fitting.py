@@ -1,5 +1,8 @@
 """Endpoints for fitting and reading the hierarchical time-prediction models."""
+from typing import Optional
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel
 
 from ..database import SessionLocal
 from ..modeling.fit_runner import get_fit_status, list_runs, load_run_diagnostics, run_fit
@@ -7,14 +10,20 @@ from ..modeling.fit_runner import get_fit_status, list_runs, load_run_diagnostic
 router = APIRouter()
 
 
+class FitRequest(BaseModel):
+    # If set, restrict training data to just the N most-recently-dated activities
+    # instead of the full history.
+    n_recent_activities: Optional[int] = None
+
+
 @router.post("/models/fit")
-def fit_models(background_tasks: BackgroundTasks):
+def fit_models(background_tasks: BackgroundTasks, request: FitRequest = FitRequest()):
     """Kick off fitting in the background. Only one fit runs at a time."""
     status = get_fit_status()
     if status["state"] == "running":
         return {"status": "already_running"}
 
-    background_tasks.add_task(run_fit, SessionLocal)
+    background_tasks.add_task(run_fit, SessionLocal, request.n_recent_activities)
     return {"status": "started"}
 
 

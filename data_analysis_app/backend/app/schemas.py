@@ -1,7 +1,22 @@
 """Pydantic schemas for API request/response validation."""
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
+
+ExperienceLevel = Literal[
+    "New Route + New Skills",
+    "New Route - Familiar Skills",
+    "Somewhat Familiar Route",
+    "Familiar Route",
+]
+
+ClimbDifficulty = Literal[
+    "3rd Class",
+    "4th Class",
+    "5th Easy",
+    "5th Moderate",
+    "5th Hard",
+]
 
 
 # Activity schemas
@@ -14,6 +29,7 @@ class ActivityBase(BaseModel):
     party_size: Optional[int] = None
     notes: Optional[str] = None
     is_planned: Optional[bool] = None
+    experience_level: Optional[ExperienceLevel] = None
 
 
 class ActivityCreate(ActivityBase):
@@ -32,6 +48,7 @@ class ActivityUpdate(BaseModel):
     party_size: Optional[int] = None
     notes: Optional[str] = None
     is_planned: Optional[bool] = None
+    experience_level: Optional[ExperienceLevel] = None
     # Only settable for planned routes - shifts every point/segment time by the same delta
     start_time_local: Optional[datetime] = None
 
@@ -103,6 +120,11 @@ class UserSegmentBase(BaseModel):
     start_time: datetime
     end_time: datetime
     is_technical: bool = False
+    # Loose on purpose: this base is also used for the response/read schemas
+    # (UserSegment, UserSegmentWithActivity), which must still be able to serialize
+    # older free-text values ("5.6", "5.10a", ...) saved before the fixed dropdown
+    # existed. The 5-value restriction is enforced on write only - see
+    # UserSegmentCreate/UserSegmentUpdate below.
     difficulty: Optional[str] = None
     pitch_count: Optional[int] = None
     is_roped: Optional[bool] = None
@@ -112,14 +134,14 @@ class UserSegmentBase(BaseModel):
 
 
 class UserSegmentCreate(UserSegmentBase):
-    pass
+    difficulty: Optional[ClimbDifficulty] = None
 
 
 class UserSegmentUpdate(BaseModel):
     segment_type: Optional[str] = Field(None, pattern="^(climb|descent|flat|rest)$")
     # start_time and end_time removed - use adjust-boundary endpoint instead
     is_technical: Optional[bool] = None
-    difficulty: Optional[str] = None
+    difficulty: Optional[ClimbDifficulty] = None
     pitch_count: Optional[int] = None
     is_roped: Optional[bool] = None
     rappel_count: Optional[int] = None

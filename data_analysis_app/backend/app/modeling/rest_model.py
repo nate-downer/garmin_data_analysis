@@ -5,7 +5,7 @@ import pymc as pm
 
 from .locomotion_model import _standardize
 
-EXTRA_COVARIATES = ["party_size", "is_hiking", "is_running"]
+EXTRA_COVARIATES = ["party_size", "is_hiking", "is_running", "pct_technical_elevation_gain"]
 
 
 def build_and_fit_rest_model(
@@ -50,6 +50,7 @@ def build_and_fit_rest_model(
             chains=chains,
             random_seed=random_seed,
             target_accept=0.9,
+            nuts_sampler="numpyro",
             progressbar=False,
         )
 

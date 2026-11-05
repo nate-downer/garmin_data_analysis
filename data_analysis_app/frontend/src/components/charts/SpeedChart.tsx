@@ -10,6 +10,7 @@ interface SpeedChartProps {
   highlightSegment?: { start: string; end: string; color: string } | null
   segmentMode?: boolean
   xDomain?: [number | string, number | string]
+  timezone?: string | null
 }
 
 // Haversine distance formula
@@ -25,7 +26,7 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c
 }
 
-function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = [], highlightSegment = null, segmentMode = false, xDomain = ['dataMin', 'dataMax'] }: SpeedChartProps) {
+function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = [], highlightSegment = null, segmentMode = false, xDomain = ['dataMin', 'dataMax'], timezone }: SpeedChartProps) {
   // Calculate speed between consecutive points (memoized for performance)
   const data = useMemo(() => {
     const result = []
@@ -47,11 +48,11 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
         index: i,
         speed: Number(cappedSpeed.toFixed(2)),
         timestamp: time1,
-        time: new Date(p1.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: new Date(p1.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone ?? undefined }),
       })
     }
     return result
-  }, [points])
+  }, [points, timezone])
 
   if (points.length < 2) {
     return (
@@ -80,7 +81,7 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
             allowDataOverflow={true}
             tick={{ fontSize: 12 }}
             stroke="#9ca3af"
-            tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone ?? undefined })}
             scale="time"
           />
           <YAxis
@@ -92,7 +93,7 @@ function SpeedChart({ points, editMode = false, onPointClick, isPointSelected = 
           position={{ y: -15 }}
           contentStyle={{ fontSize: 11, backgroundColor: 'rgba(255, 255, 255, 0.95)', border: 'none', padding: '4px 8px' }}
           formatter={(value: number, name: string, props: any) => {
-            const time = new Date(props.payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            const time = new Date(props.payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone ?? undefined })
             return [`${value} mph at ${time}`, '']
           }}
           labelFormatter={() => ''}

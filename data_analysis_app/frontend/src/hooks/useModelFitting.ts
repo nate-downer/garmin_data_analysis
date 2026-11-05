@@ -18,7 +18,7 @@ interface UseModelFittingResult {
   diagnostics: AllModelDiagnostics | null;
   diagnosticsLoading: boolean;
   diagnosticsError: string | null;
-  startFit: () => Promise<void>;
+  startFit: (nRecentActivities?: number | null) => Promise<void>;
 }
 
 export function useModelFitting(): UseModelFittingResult {
@@ -87,8 +87,8 @@ export function useModelFitting(): UseModelFittingResult {
     }
   }, [fetchRuns, selectRun, stopPolling]);
 
-  const startFit = useCallback(async () => {
-    await modelsAPI.fit();
+  const startFit = useCallback(async (nRecentActivities?: number | null) => {
+    await modelsAPI.fit(nRecentActivities);
     await pollStatus();
     stopPolling();
     pollRef.current = setInterval(pollStatus, POLL_INTERVAL_MS);

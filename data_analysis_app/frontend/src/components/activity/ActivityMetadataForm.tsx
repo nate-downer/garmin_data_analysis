@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, TERRAIN_FACTORS } from '../../types'
+import { Activity, TERRAIN_FACTORS, EXPERIENCE_LEVELS } from '../../types'
 import { activitiesAPI } from '../../services/api'
 
 interface ActivityMetadataFormProps {
@@ -13,6 +13,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
   const [bodyWeight, setBodyWeight] = useState(activity.body_weight_lbs || '')
   const [weightCarried, setWeightCarried] = useState(activity.weight_carried_lbs || '')
   const [terrainFactor, setTerrainFactor] = useState(activity.terrain_factor || 1.1)
+  const [experienceLevel, setExperienceLevel] = useState(activity.experience_level || 'New Route - Familiar Skills')
   const [partySize, setPartySize] = useState(activity.party_size || '')
   const [notes, setNotes] = useState(activity.notes || '')
   const [startTimeLocal, setStartTimeLocal] = useState(activity.start_time_local ? activity.start_time_local.slice(0, 16) : '')
@@ -57,12 +58,16 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
 
       await activitiesAPI.update(activity.activity_id, {
         activity_name: activityName || undefined,
-        body_weight_lbs: bodyWeight ? Number(bodyWeight) : undefined,
-        weight_carried_lbs: weightCarried ? Number(weightCarried) : undefined,
         terrain_factor: terrainFactor,
-        party_size: partySize ? Number(partySize) : undefined,
+        experience_level: experienceLevel,
         notes: notes || undefined,
-        ...(activity.is_planned && startTimeLocal ? { start_time_local: startTimeLocal } : {}),
+        ...(activity.is_planned
+          ? (startTimeLocal ? { start_time_local: startTimeLocal } : {})
+          : {
+              body_weight_lbs: bodyWeight ? Number(bodyWeight) : undefined,
+              weight_carried_lbs: weightCarried ? Number(weightCarried) : undefined,
+              party_size: partySize ? Number(partySize) : undefined,
+            }),
       })
 
       setMessage({ type: 'success', text: 'Saved successfully!' })
@@ -133,42 +138,44 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
           />
         </div>
 
-        {/* Body Weight and Pack Weight - side by side */}
-        <div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Body Weight (lbs)
-              </label>
-              <input
-                type="number"
-                value={bodyWeight}
-                onChange={(e) => setBodyWeight(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
-                placeholder="0"
-              />
-            </div>
+        {/* Body Weight and Pack Weight - side by side (not for planned routes - set per-prediction in the Predict Time panel instead) */}
+        {!activity.is_planned && (
+          <div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Body Weight (lbs)
+                </label>
+                <input
+                  type="number"
+                  value={bodyWeight}
+                  onChange={(e) => setBodyWeight(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+                  placeholder="0"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Pack Weight (lbs)
-              </label>
-              <input
-                type="number"
-                value={weightCarried}
-                onChange={(e) => setWeightCarried(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
-                placeholder="0"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Pack Weight (lbs)
+                </label>
+                <input
+                  type="number"
+                  value={weightCarried}
+                  onChange={(e) => setWeightCarried(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+                  placeholder="0"
+                />
+              </div>
             </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Required for energy calculations
+            </p>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Required for energy calculations
-          </p>
-        </div>
+        )}
 
-        {/* Default Terrain Factor and Party Size - side by side */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Default Terrain Factor and Party Size - side by side (Party Size moves to Predict Time for planned routes) */}
+        <div className={activity.is_planned ? '' : 'grid grid-cols-2 gap-3'}>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Default Terrain Factor
@@ -186,21 +193,44 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
             </select>
             <p className="text-xs text-gray-500 mt-1">
               Default for all segments
+              {activity.is_planned && ' — body weight, pack weight, and party size are set per-prediction in the Predict Time panel below.'}
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Party Size
-            </label>
-            <input
-              type="number"
-              value={partySize}
-              onChange={(e) => setPartySize(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
-              placeholder="1"
-            />
-          </div>
+          {!activity.is_planned && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Party Size
+              </label>
+              <input
+                type="number"
+                value={partySize}
+                onChange={(e) => setPartySize(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+                placeholder="1"
+              />
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Experience Level
+          </label>
+          <select
+            value={experienceLevel}
+            onChange={(e) => setExperienceLevel(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+          >
+            {EXPERIENCE_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            How familiar you are with this route and the skills it requires - used by the time-prediction model.
+          </p>
         </div>
 
         <div>

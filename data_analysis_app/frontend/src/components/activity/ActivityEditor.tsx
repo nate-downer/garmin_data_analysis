@@ -1,11 +1,27 @@
 import { useState, useEffect, useCallback, useRef, startTransition, useMemo, memo } from 'react'
-import { Activity, Point, UserSegment, TERRAIN_FACTORS } from '../../types'
+import { Activity, Point, UserSegment, TERRAIN_FACTORS, CLIMB_DIFFICULTIES, PredictionResult } from '../../types'
 import { pointsAPI, segmentsAPI, userSegmentsAPI } from '../../services/api'
 import ActivityMap from '../map/ActivityMap'
 import ElevationChart from '../charts/ElevationChart'
 import SpeedChart from '../charts/SpeedChart'
 import ActivityMetadataForm from './ActivityMetadataForm'
 import PredictTimePanel from './PredictTimePanel'
+import PredictionDistributionChart from '../charts/analysis/PredictionDistributionChart'
+import PredictionCumulativeChart from '../charts/analysis/PredictionCumulativeChart'
+import PredictionTimeOfDayChart from '../charts/analysis/PredictionTimeOfDayChart'
+import { formatDistance } from '../../utils/formatters'
+
+// Predict Time plots: shared time-of-day window logic for summit/finish coloring + subtitles
+const AFTERNOON_START_MIN = 12 * 60
+const AFTERNOON_END_MIN = 17 * 60
+
+const isAfternoonWindow = (m: number) => m >= AFTERNOON_START_MIN && m < AFTERNOON_END_MIN
+
+const isDaylight = (m: number, sunrise: number | null, sunset: number | null) =>
+  sunrise != null && sunset != null && m >= sunrise && m < sunset
+
+const percentMatching = (values: number[], predicate: (m: number) => boolean): number | null =>
+  values.length === 0 ? null : Math.round((values.filter(predicate).length / values.length) * 100)
 
 // Helper function to get segment colors
 const getSegmentColors = (segmentType: 'climb' | 'descent' | 'flat' | 'rest') => {
@@ -190,7 +206,7 @@ const SegmentEditor = memo(({
   )
 
   // Technical climb metadata
-  const [difficulty, setDifficulty] = useState(editingSegment?.difficulty || '')
+  const [difficulty, setDifficulty] = useState(editingSegment?.difficulty || '3rd Class')
   const [pitchCount, setPitchCount] = useState<number>(editingSegment?.pitch_count || 0)
 
   // Pandolf equation inputs
@@ -478,13 +494,17 @@ const SegmentEditor = memo(({
         <div className="space-y-3 pt-3 border-t border-gray-200">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Max Difficulty</label>
-            <input
-              type="text"
+            <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value)}
-              placeholder="e.g. 5.10a"
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
-            />
+            >
+              {CLIMB_DIFFICULTIES.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Number of Pitches</label>
@@ -877,6 +897,17 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   const [selectedPointIndices, setSelectedPointIndices] = useState<number[]>([])
   const [removing, setRemoving] = useState(false)
   const [activePanel, setActivePanel] = useState<'metadata' | 'waypoints' | 'segments' | 'predict' | null>('metadata')
+  const [predictionResult, setPredictionResult] = useState<PredictionResult | null>(null)
+  const sunriseMin = predictionResult?.sunrise_time_of_day_min ?? null
+  const sunsetMin = predictionResult?.sunset_time_of_day_min ?? null
+  const summitOutsideAfternoonPct = useMemo(
+    () => percentMatching(predictionResult?.summit_time_of_day_min ?? [], (m) => !isAfternoonWindow(m)),
+    [predictionResult?.summit_time_of_day_min]
+  )
+  const finishDaylightPct = useMemo(
+    () => percentMatching(predictionResult?.finish_time_of_day_min ?? [], (m) => isDaylight(m, sunriseMin, sunsetMin)),
+    [predictionResult?.finish_time_of_day_min, sunriseMin, sunsetMin]
+  )
 
   // Segment creation/editing state
   const [creatingSegment, setCreatingSegment] = useState(false)
@@ -1698,39 +1729,101 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
             <div className={`bg-white rounded-lg shadow-lg p-4 space-y-6 ${
               editingMode ? 'ring-4 ring-blue-500' : ''
             } ${editingMode ? 'rounded-t-none' : ''}`}>
-            {/* Elevation Chart */}
-            <ElevationChart
-              points={points}
-              editMode={editMode || creatingSegment || editingSegmentId !== null}
-              isPointSelected={isPointSelected}
-              onPointClick={
-                creatingSegment || editingSegmentId !== null
-                  ? handleChartClick
-                  : editMode
-                  ? handleTogglePoint
-                  : undefined
-              }
-              highlightSegment={selectedSegmentHighlight}
-              segmentMode={activePanel === 'segments'}
-              xDomain={chartDomain}
-            />
+            {activePanel === 'predict' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 text-gray-700">Total Time Distribution</h4>
+                  <PredictionDistributionChart
+                    draws={predictionResult?.total_distribution_min ?? []}
+                    meanMin={predictionResult?.total_mean_min ?? 0}
+                    actualMin={predictionResult?.actual_total_min}
+                    xAxisLabel="Total Time"
+                    height={220}
+                  />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 text-gray-700">Cumulative Time vs. Distance</h4>
+                  <PredictionCumulativeChart
+                    points={predictionResult?.cumulative_points ?? []}
+                    actualPoints={predictionResult?.actual_cumulative_points}
+                    yKey="cumulative_distance_mi"
+                    yLabel="Distance"
+                    yFormatter={formatDistance}
+                    height={220}
+                  />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 text-gray-700">Summit Time Distribution</h4>
+                  {summitOutsideAfternoonPct !== null && (
+                    <p className="text-xs text-gray-500 mb-2">
+                      Summit outside of afternoon window in {summitOutsideAfternoonPct}% of draws.
+                    </p>
+                  )}
+                  <PredictionTimeOfDayChart
+                    values={predictionResult?.summit_time_of_day_min ?? []}
+                    meanValue={predictionResult?.summit_mean_time_of_day_min ?? 0}
+                    actualValue={predictionResult?.actual_summit_time_of_day_min}
+                    categoryForBin={(m) => isAfternoonWindow(m) ? 'red' : 'grey'}
+                    xAxisLabel="Summit Time"
+                    height={220}
+                  />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 text-gray-700">Finish Time Distribution</h4>
+                  {finishDaylightPct !== null && (
+                    <p className="text-xs text-gray-500 mb-2">
+                      Finish during daylight in {finishDaylightPct}% of draws.
+                    </p>
+                  )}
+                  <PredictionTimeOfDayChart
+                    values={predictionResult?.finish_time_of_day_min ?? []}
+                    meanValue={predictionResult?.finish_mean_time_of_day_min ?? 0}
+                    actualValue={predictionResult?.actual_finish_time_of_day_min}
+                    categoryForBin={(m) => isDaylight(m, sunriseMin, sunsetMin) ? 'blue' : 'grey'}
+                    xAxisLabel="Finish Time"
+                    height={220}
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Elevation Chart */}
+                <ElevationChart
+                  points={points}
+                  editMode={editMode || creatingSegment || editingSegmentId !== null}
+                  isPointSelected={isPointSelected}
+                  onPointClick={
+                    creatingSegment || editingSegmentId !== null
+                      ? handleChartClick
+                      : editMode
+                      ? handleTogglePoint
+                      : undefined
+                  }
+                  highlightSegment={selectedSegmentHighlight}
+                  segmentMode={activePanel === 'segments'}
+                  xDomain={chartDomain}
+                  timezone={activity.timezone}
+                />
 
-            {/* Speed Chart */}
-            <SpeedChart
-              points={points}
-              editMode={editMode || creatingSegment || editingSegmentId !== null}
-              isPointSelected={isPointSelected}
-              onPointClick={
-                creatingSegment || editingSegmentId !== null
-                  ? handleChartClick
-                  : editMode
-                  ? handleTogglePoint
-                  : undefined
-              }
-              highlightSegment={selectedSegmentHighlight}
-              segmentMode={activePanel === 'segments'}
-              xDomain={chartDomain}
-            />
+                {/* Speed Chart */}
+                <SpeedChart
+                  points={points}
+                  editMode={editMode || creatingSegment || editingSegmentId !== null}
+                  isPointSelected={isPointSelected}
+                  onPointClick={
+                    creatingSegment || editingSegmentId !== null
+                      ? handleChartClick
+                      : editMode
+                      ? handleTogglePoint
+                      : undefined
+                  }
+                  highlightSegment={selectedSegmentHighlight}
+                  segmentMode={activePanel === 'segments'}
+                  xDomain={chartDomain}
+                  timezone={activity.timezone}
+                />
+              </>
+            )}
           </div>
           </div>
         </div>
@@ -1810,16 +1903,14 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
               />
             </AccordionSection>
 
-            {activity.is_planned && (
-              <AccordionSection
-                id="predict"
-                title="Predict Time"
-                isOpen={activePanel === 'predict'}
-                onToggle={() => setActivePanel(activePanel === 'predict' ? null : 'predict')}
-              >
-                <PredictTimePanel activity={activity} />
-              </AccordionSection>
-            )}
+            <AccordionSection
+              id="predict"
+              title="Predict Time"
+              isOpen={activePanel === 'predict'}
+              onToggle={() => setActivePanel(activePanel === 'predict' ? null : 'predict')}
+            >
+              <PredictTimePanel activity={activity} result={predictionResult} onResultChange={setPredictionResult} />
+            </AccordionSection>
           </div>
         </div>
       </div>

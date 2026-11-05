@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import List, Optional
 
 import arviz as az
+import numpy as np
 
 from .data import extract_locomotion_dataframe, extract_rest_dataframe
-from .locomotion_model import SEGMENT_TYPES, TYPES_WITHOUT_ACTIVITY_OFFSET, build_and_fit_single_type_model
+from .effort import calibrate_effort_curve, compute_effort
+from .locomotion_model import SEGMENT_TYPES, EFFORT_SEGMENT_TYPES, build_and_fit_pooled_model
 from .rest_model import build_and_fit_rest_model
-from .diagnostics import single_type_diagnostics, rest_diagnostics
+from .diagnostics import pooled_diagnostics, rest_diagnostics
 
 TRACE_DIR = Path(__file__).resolve().parent / "traces"
 TRACE_DIR.mkdir(exist_ok=True)
@@ -25,11 +27,14 @@ RUNS_INDEX_PATH = TRACE_DIR / "runs_index.json"
 
 MODEL_GROUPS = SEGMENT_TYPES + ["rest"]
 
-FIT_STEPS = (
-    ["Extracting segment data"]
-    + [f"Fitting {t} model" for t in SEGMENT_TYPES]
-    + ["Fitting rest-time model", "Computing diagnostics", "Saving results"]
-)
+FIT_STEPS = [
+    "Extracting segment data",
+    "Calibrating effort curve",
+    "Fitting pooled locomotion model",
+    "Fitting rest-time model",
+    "Computing diagnostics",
+    "Saving results",
+]
 
 _status_lock = threading.Lock()
 _status = {
@@ -111,17 +116,20 @@ def run_dir(run_id: str) -> Path:
     return _run_dir(run_id)
 
 
-def run_fit(db_session_factory) -> None:
+def run_fit(db_session_factory, n_recent_activities: Optional[int] = None) -> None:
     """
     Fit all time-prediction models and persist results as a new historical run.
 
-    The 5 locomotion segment types are fit as fully independent models (no shared
-    parameters between them) - pooling them via shared hyper-priors produced a hard-to
-    -sample funnel that got worse with more tuning, so each type now gets its own
-    self-contained model instead.
+    The 5 locomotion segment types are fit together in one pooled hierarchical model
+    (see locomotion_model.py) - this is safe to pool now that "effort" is a
+    deterministic feature rather than a latent variable, which is what caused the
+    earlier pooled attempt's hard-to-sample funnel.
 
     Runs inside a FastAPI background task, so it takes a session factory (not a live
     Session) since the request that triggered it may have already returned.
+
+    `n_recent_activities`, if given, restricts training data to just the N
+    most-recently-dated real activities instead of the full history.
     """
     with _status_lock:
         if _status["state"] == "running":
@@ -132,58 +140,63 @@ def run_fit(db_session_factory) -> None:
     db = db_session_factory()
     try:
         _set_step(0)
-        loco_df = extract_locomotion_dataframe(db)
-        rest_df = extract_rest_dataframe(db)
+        loco_df = extract_locomotion_dataframe(db, n_recent_activities)
+        rest_df = extract_rest_dataframe(db, n_recent_activities)
 
         if loco_df.empty or rest_df.empty:
             raise ValueError("Not enough segment data to fit models.")
 
         activity_ids = set(loco_df["activity_id"]) | set(rest_df["activity_id"])
 
-        diagnostics = {}
-        loco_fits = {}
-        for i, type_name in enumerate(SEGMENT_TYPES):
-            _set_step(1 + i)
-            type_df = loco_df[loco_df["segment_type_5"] == type_name]
-            if type_df.empty:
-                continue
-            fit = build_and_fit_single_type_model(
-                type_df, include_activity_offset=type_name not in TYPES_WITHOUT_ACTIVITY_OFFSET
-            )
-            loco_fits[type_name] = fit
-            diagnostics[type_name] = single_type_diagnostics(fit, type_name)
+        _set_step(1)
+        # Calibrate the effort curve on only the 3 non-vertical types - including
+        # technical_climb/technical_descent here would let their distance-irrelevant
+        # dynamics skew the curve shape for the types that are genuinely
+        # distance-driven (see locomotion_model.py's EFFORT_SEGMENT_TYPES docstring).
+        effort_calibration_df = loco_df[loco_df["segment_type_5"].isin(EFFORT_SEGMENT_TYPES)]
+        effort_params = calibrate_effort_curve(effort_calibration_df)
+        loco_df = loco_df.copy()
+        loco_df["effort"] = compute_effort(
+            loco_df["distance_mi"], loco_df["elevation_gain_ft"],
+            effort_params["p_distance"], effort_params["p_elevation"],
+        )
+        loco_df["log_effort"] = np.log(loco_df["effort"] + 1e-6)
 
-        _set_step(1 + len(SEGMENT_TYPES))
+        _set_step(2)
+        loco_fit = build_and_fit_pooled_model(loco_df)
+        diagnostics = pooled_diagnostics(loco_fit)
+
+        _set_step(3)
         rest_fit = build_and_fit_rest_model(rest_df)
 
-        _set_step(2 + len(SEGMENT_TYPES))
+        _set_step(4)
         diagnostics.update(rest_diagnostics(rest_fit))
 
-        _set_step(3 + len(SEGMENT_TYPES))
+        _set_step(5)
         run_dir = _run_dir(run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
-        for type_name, fit in loco_fits.items():
-            az.to_netcdf(fit["idata"], str(run_dir / f"locomotion_trace_{type_name}.nc"))
+        az.to_netcdf(loco_fit["idata"], str(run_dir / "locomotion_trace.nc"))
         az.to_netcdf(rest_fit["idata"], str(run_dir / "rest_trace.nc"))
         (run_dir / "diagnostics.json").write_text(json.dumps(diagnostics))
 
         # Standardization stats + covariate bookkeeping needed to score NEW (unseen)
         # data later - these only exist in-memory during a fit otherwise, and
         # predicting against a historical run requires them in a later session.
-        metadata = {}
-        for type_name, fit in loco_fits.items():
-            metadata[type_name] = {
-                "used_covariates": fit["used_covariates"],
-                "include_activity_offset": fit["include_activity_offset"],
-                "distance_stats": vars(fit["distance_stats"]),
-                "elevation_stats": vars(fit["elevation_stats"]),
-                "covariate_stats": {cov: vars(stats) for cov, stats in fit["covariate_stats"].items()},
-            }
-        metadata["rest"] = {
-            "used_covariates": rest_fit["used_covariates"],
-            "distance_stats": vars(rest_fit["distance_stats"]),
-            "elevation_stats": vars(rest_fit["elevation_stats"]),
-            "covariate_stats": {cov: vars(stats) for cov, stats in rest_fit["covariate_stats"].items()},
+        metadata = {
+            "locomotion": {
+                "segment_types": SEGMENT_TYPES,
+                "effort_segment_types": EFFORT_SEGMENT_TYPES,
+                "used_covariates": loco_fit["used_covariates"],
+                "log_effort_stats": vars(loco_fit["log_effort_stats"]),
+                "covariate_stats": {cov: vars(stats) for cov, stats in loco_fit["covariate_stats"].items()},
+                "effort_params": effort_params,
+            },
+            "rest": {
+                "used_covariates": rest_fit["used_covariates"],
+                "distance_stats": vars(rest_fit["distance_stats"]),
+                "elevation_stats": vars(rest_fit["elevation_stats"]),
+                "covariate_stats": {cov: vars(stats) for cov, stats in rest_fit["covariate_stats"].items()},
+            },
         }
         (run_dir / "metadata.json").write_text(json.dumps(metadata))
 
@@ -196,6 +209,7 @@ def run_fit(db_session_factory) -> None:
             "run_id": run_id,
             "created_at": datetime.utcnow().isoformat(),
             "n_activities_total": len(activity_ids),
+            "n_recent_activities_filter": n_recent_activities,
             "rmse_pct": rmse_pct,
         })
 

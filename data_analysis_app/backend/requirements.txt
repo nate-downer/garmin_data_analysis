@@ -12,7 +12,7 @@ pydantic-settings==2.1.0
 
 # Data processing
 pandas==2.2.0
-numpy==1.26.3
+numpy==1.26.4
 
 # Bayesian modeling (Milestone 0.7 - time prediction models)
 pymc==5.19.1
@@ -20,12 +20,21 @@ arviz==0.20.0
 matplotlib==3.9.4
 h5py==3.16.0
 
+# Faster NUTS sampler backend (Milestone 0.9 - pooled effort model speed-up)
+# Pinned to jax 0.4.26 / numpyro 0.15.3 specifically because newer jax releases pull
+# ml-dtypes>=2.0, which conflicts with pandas/pytensor/timezonefinder's numpy<2 pin.
+jax[cpu]==0.4.26
+numpyro==0.15.3
+
 # GPX parsing
 gpxpy==1.6.2
 
 # Timezone handling
 timezonefinder==6.5.0
 pytz==2024.1
+
+# Sunset calculation (Milestone 0.8 - time prediction plots)
+astral==3.2
 
 # File uploads
 python-multipart==0.0.6
