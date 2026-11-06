@@ -152,6 +152,13 @@ def extract_all_segments(
     df["elevation_change_tech_descent"] = elevation_loss_filled.where(is_tech_descent, 0.0)
     df["pitch_count_tech_climb"] = pitch_count_filled.where(is_tech_climb, 0.0)
 
+    # Terrain factor (Pandolf ground-surface factor: paved/dirt/brush/sand) only
+    # makes sense for foot-based locomotion - there's no "ground surface" when
+    # climbing a rock face or rappelling. Zero for both vertical types, same
+    # convention as the dummies above.
+    is_tech_vertical = is_tech_climb | is_tech_descent
+    df["terrain_factor_nontechnical"] = df["terrain_factor"].where(~is_tech_vertical, 0.0)
+
     return df
 
 

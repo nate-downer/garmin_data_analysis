@@ -60,7 +60,7 @@ EFFORT_SEGMENT_TYPES = [
 
 SHARED_COVARIATES = [
     "load_ratio",
-    "terrain_factor",
+    "terrain_factor_nontechnical",
     "cum_distance_prior_mi",
     "cum_elevation_prior_ft",
     "party_size",

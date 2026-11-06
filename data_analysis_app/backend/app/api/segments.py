@@ -64,7 +64,10 @@ def get_all_user_segments(
     db: Session = Depends(get_db)
 ):
     """
-    Get all user segments across all activities with enriched data.
+    Get all user segments across completed (non-planned) activities, with enriched data.
+
+    Only consumer today is the Analysis page, which should only reflect real
+    recorded activity data - planned routes are excluded unconditionally.
 
     Returns segments with activity context (activity name, date) and calculated metrics
     (duration, distance, speed, grade, climb rate).
@@ -75,10 +78,10 @@ def get_all_user_segments(
     Returns:
         List of user segments with activity context and calculated metrics
     """
-    # Query user segments with activity join
+    # Query user segments with activity join, excluding planned routes
     query = db.query(models.UserSegment, models.Activity).join(
         models.Activity, models.UserSegment.activity_id == models.Activity.activity_id
-    )
+    ).filter(models.Activity.is_planned == False)
 
     # Filter by segment type if provided
     if segment_type:
@@ -652,24 +655,38 @@ def generate_segments(
         )
         segment_objects.append(user_segment)
 
-    db.bulk_save_objects(segment_objects)
+    # add_all (not bulk_save_objects) keeps these objects attached to the session,
+    # so they get real IDs after commit and the energy-calc mutations below actually
+    # persist - bulk_save_objects detaches objects from the session entirely, which
+    # both breaks db.refresh() and silently drops any later attribute changes.
+    db.add_all(segment_objects)
     db.commit()
 
-    # Calculate energy for all non-technical segments
-    # Pass cached points to avoid N+1 query problem
-    for segment in segment_objects:
-        db.refresh(segment)  # Refresh to get the ID
-        calculate_segment_energy(segment, activity, db, points=points)
+    # Calculate energy for all non-technical segments. Segments are already
+    # committed at this point - if this step fails, the segments the user asked
+    # for still exist, so don't let that failure look like the whole request failed.
+    energy_calc_error = None
+    try:
+        for segment in segment_objects:
+            calculate_segment_energy(segment, activity, db, points=points)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        energy_calc_error = str(e)
+        print(f"Energy calculation failed after segment creation: {energy_calc_error}")
 
-    db.commit()
-
-    return {
+    result = {
         "message": f"Generated {len(segment_objects)} segments",
         "segments_created": len(segment_objects),
         "rest_segments": len(rest_segments),
         "inactive_points": inactive_count,
         "total_points": len(points)
     }
+    if energy_calc_error:
+        result["energy_calculation_warning"] = (
+            f"Segments were created, but energy calculation failed: {energy_calc_error}"
+        )
+    return result
 
 
 @router.post("/activities/{activity_id}/user-segments/repair-adjacency")

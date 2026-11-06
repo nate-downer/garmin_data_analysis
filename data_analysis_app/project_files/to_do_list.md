@@ -268,11 +268,32 @@ For the rest time model, I would also like to add a factor that represents the %
 
 ### UAC
 
-- [ ] Model is re-structured as heirarchical
-- [ ] Model back end is sped up substantailly (somehow)
-- [ ] New equation is implemented across all the appropriate models
-- [ ] New UI is added for the use to ad the level of expecince with the route
-- [ ] New rest time factor is implemented
+- [x] Model is re-structured as heirarchical
+- [x] Model back end is sped up substantailly
+- [x] New equation is implemented across all the appropriate models
+- [x] New UI is added for the use to ad the level of expecince with the route
+- [x] New rest time factor is implemented
+
+
+### Additional Small Updates
+
+- [x] Make editing the activity type possible
+- [x] Remove planned actitivies from the analysis section and models
+- [x] Move the familiarity selector into the predict time accordion
+- [x] Improve the plots in the models evalutation seciton and add colors
+- [x] Make the analysis seciton better (with best fit curves that don't suck)
+- [x] Add a landing page (with explination of the project)
+- [ ] Fix bug that stops segments from loading right away after generation
+
+
+## Milestone 1.0 - Host App 
+
+Ok there is going to be a lot to cover with this one. A few main topics off the top of my head:
+
+- View only mode: What controls are enables, what data gets hidden, etc.
+- Log in and security: How do I set up a password based adming login for myself? Can we make it flexible enough to have other people's data in it one day in the future? Should we be able to flag certain activities as private and hide them from the general view?
+- Hosting: Where? How? How much?
+- Deployment: What will deploying updates to the public site look like? will I need to have dev adn staging versions? what will the structure for all of that be?
 
 
 
@@ -282,5 +303,10 @@ For the rest time model, I would also like to add a factor that represents the %
 - [x] Allow the user to predict their time on other routes.
 - [ ] Figure out if total elevation gain is bugged / ensure total calculations work better
 - [ ] Make the dot field more fun / interactive
-- [ ] Make the algorithims faster
+- [x] Make the algorithims faster
 - [ ] Pubish and host app
+- [ ] Improve automted segment genneration
+- [ ] Add the ability to split and merge whole activities (allowing a planned route to be broken into multiple days, or an approach and descent to be joined together for example)
+
+
+

@@ -16,6 +16,7 @@ export interface Activity {
   total_distance_mi: number | null;
   total_elevation_gain_ft: number | null;
   total_elevation_loss_ft: number | null;
+  predicted_total_duration_sec: number | null;
   body_weight_lbs: number | null;
   weight_carried_lbs: number | null;
   terrain_factor: number | null;
@@ -109,6 +110,7 @@ export interface RestorePointsRequest {
 
 export interface ActivityUpdate {
   activity_name?: string;
+  activity_type?: string;
   body_weight_lbs?: number;
   weight_carried_lbs?: number;
   terrain_factor?: number;
@@ -116,6 +118,7 @@ export interface ActivityUpdate {
   notes?: string;
   is_planned?: boolean;
   experience_level?: string;
+  predicted_total_duration_sec?: number;
   // Only settable for planned routes - shifts every point/segment time by the same delta
   start_time_local?: string;
 }
@@ -172,6 +175,7 @@ export interface PredictionRequest {
   body_weight_lbs: number;
   pack_weight_lbs: number;
   party_size: number;
+  experience_level: string;
 }
 
 export interface PredictionSegmentResult {
@@ -226,6 +230,10 @@ export interface VarianceExplainedEntry {
   median_pct: number;
   low_pct: number;
   high_pct: number;
+  // Optional: absent on runs fitted before this field existed.
+  coefficient_median?: number;
+  coefficient_low?: number;
+  coefficient_high?: number;
 }
 
 export interface PredictedVsActualPoint {
@@ -281,4 +289,12 @@ export const CLIMB_DIFFICULTIES = [
   '5th Easy',
   '5th Moderate',
   '5th Hard',
+] as const;
+
+// The 3 values the time-prediction model actually distinguishes (is_hiking/
+// is_running dummies, relative to "mountaineering" as the baseline)
+export const ACTIVITY_TYPES = [
+  'hiking',
+  'running',
+  'mountaineering',
 ] as const;

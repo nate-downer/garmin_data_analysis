@@ -250,6 +250,12 @@ export const predictionsAPI = {
     const response = await apiClient.post<PredictionResult>(`/activities/${activityId}/predict`, request);
     return response.data;
   },
+  // Most recently saved prediction for this activity (the backend auto-saves on
+  // every successful predict call), or null if none has been run yet.
+  getSaved: async (activityId: string): Promise<PredictionResult | null> => {
+    const response = await apiClient.get<PredictionResult | null>(`/activities/${activityId}/predicted-result`);
+    return response.data;
+  },
 };
 
 export default apiClient;

@@ -8,6 +8,7 @@ import type { PredictedVsActualPoint } from '../../../types';
 
 interface PredictedVsActualChartProps {
   data: PredictedVsActualPoint[];
+  color?: string;
 }
 
 const formatMinutes = (value: number) => `${value.toFixed(1)} min`;
@@ -35,7 +36,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
-function PredictedVsActualChart({ data }: PredictedVsActualChartProps) {
+function PredictedVsActualChart({ data, color = '#ea580c' }: PredictedVsActualChartProps) {
   const { points, referenceLine, maxValue } = useMemo(() => {
     const pts = data.map((d) => ({ x: d.actual_min, y: d.predicted_min, label: d.label, activityName: d.activity_name }));
     const max = pts.reduce((m, p) => Math.max(m, p.x, p.y), 0) * 1.05 || 1;
@@ -55,7 +56,7 @@ function PredictedVsActualChart({ data }: PredictedVsActualChartProps) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={250}>
+    <ResponsiveContainer width="100%" height={375}>
       <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 30 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis
@@ -92,7 +93,7 @@ function PredictedVsActualChart({ data }: PredictedVsActualChartProps) {
           isAnimationActive={false}
           legendType="none"
         />
-        <Scatter data={points} fill="#ea580c" fillOpacity={0.6} />
+        <Scatter data={points} fill={color} fillOpacity={0.6} />
       </ComposedChart>
     </ResponsiveContainer>
   );

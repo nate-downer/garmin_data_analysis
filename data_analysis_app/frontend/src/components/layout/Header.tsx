@@ -7,7 +7,7 @@ interface HeaderProps {
 }
 
 const NAV_ITEMS = [
-  { label: 'Edit Activities', path: '/' },
+  { label: 'Edit Activities', path: '/app' },
   { label: 'View Analysis', path: '/analysis' },
   { label: 'Build Models', path: '/build-model' },
   { label: 'Plan Routes', path: '/plan-routes' },
@@ -22,7 +22,7 @@ function Header({ onActivityUploaded }: HeaderProps) {
     if (onActivityUploaded) {
       onActivityUploaded()
     }
-    navigate(isPlanned ? '/plan-routes' : '/', { state: { selectedActivityId: activityId } })
+    navigate(isPlanned ? '/plan-routes' : '/app', { state: { selectedActivityId: activityId } })
   }
 
   return (
@@ -30,10 +30,10 @@ function Header({ onActivityUploaded }: HeaderProps) {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-            <div>
+            <button className="text-left cursor-pointer" onClick={() => navigate('/')}>
               <h1 className="text-3xl font-bold text-gray-900">Mountain G.O.A.T.</h1>
               <p className="mt-1 text-sm text-gray-500">Generative Outdoor Activity Tracker</p>
-            </div>
+            </button>
 
             {/* Action Buttons */}
             <div className="flex space-x-4">

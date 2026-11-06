@@ -41,8 +41,6 @@ interface ActivityScatterPlotProps {
   yKey: keyof Activity;
   xLabel: string;
   yLabel: string;
-  asymptoteMultiplier?: number; // Controls asymptote height (default 5)
-  slopeMultiplier?: number; // Controls initial slope (default 0.1)
 }
 
 function ActivityScatterPlot({
@@ -51,8 +49,6 @@ function ActivityScatterPlot({
   yKey,
   xLabel,
   yLabel,
-  asymptoteMultiplier = 5,
-  slopeMultiplier = 0.1
 }: ActivityScatterPlotProps) {
   // Transform data to scatter plot format
   const chartData = useMemo(() => {
@@ -68,8 +64,8 @@ function ActivityScatterPlot({
 
   // Fit exponential saturation curve (diminishing returns)
   const trendline = useMemo(() => {
-    return fitExponentialSaturation(chartData, asymptoteMultiplier, slopeMultiplier, 1.5, 0.001);
-  }, [chartData, asymptoteMultiplier, slopeMultiplier]);
+    return fitExponentialSaturation(chartData);
+  }, [chartData]);
 
   if (chartData.length === 0) {
     return (

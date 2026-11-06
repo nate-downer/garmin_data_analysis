@@ -67,7 +67,6 @@ function ActivityAnalysisSection({ activities }: ActivityAnalysisSectionProps) {
             yKey="total_distance_mi"
             xLabel="Duration"
             yLabel="Distance (mi)"
-            asymptoteMultiplier={2.5}
           />
         </div>
 
@@ -80,7 +79,6 @@ function ActivityAnalysisSection({ activities }: ActivityAnalysisSectionProps) {
             yKey="total_elevation_gain_ft"
             xLabel="Duration"
             yLabel="Elevation Gain (ft)"
-            asymptoteMultiplier={2.5}
           />
         </div>
 

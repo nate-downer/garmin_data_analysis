@@ -16,11 +16,15 @@ interface UseAnalysisDataResult {
 
 export function useAnalysisData(): UseAnalysisDataResult {
   const {
-    activities,
+    activities: allActivities,
     loading: activitiesLoading,
     error: activitiesError,
     refetch: refetchActivities,
   } = useActivities();
+
+  // Analysis should only reflect real recorded data, not planned/hypothetical routes.
+  // (Climb segments are already filtered server-side in the /user-segments endpoint.)
+  const activities = allActivities.filter((activity) => !activity.is_planned);
 
   const {
     segments: climbSegments,

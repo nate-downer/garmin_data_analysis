@@ -1,6 +1,8 @@
 """Endpoint for predicting how long a planned route will take, using an already
 fitted historical model run.
 """
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -9,6 +11,7 @@ import pandas as pd
 from .. import models
 from ..database import get_db
 from ..modeling.prediction import predict_route
+from ..schemas import ExperienceLevel
 
 router = APIRouter()
 
@@ -21,6 +24,7 @@ class PredictionRequest(BaseModel):
     body_weight_lbs: float
     pack_weight_lbs: float
     party_size: float
+    experience_level: ExperienceLevel
 
 
 @router.post("/activities/{activity_id}/predict")
@@ -36,11 +40,34 @@ def predict_activity_time(activity_id: str, request: PredictionRequest, db: Sess
         raise HTTPException(status_code=400, detail=f"Invalid start_time: {exc}")
 
     try:
-        return predict_route(
+        result = predict_route(
             db, activity_id, request.run_id, start_time,
             body_weight_lbs=request.body_weight_lbs,
             pack_weight_lbs=request.pack_weight_lbs,
             party_size=request.party_size,
+            experience_level=request.experience_level,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    # Persist the latest estimate (full result + the cheap summary field the
+    # activity list reads) so it survives a page reload and can be restored
+    # without re-running the prediction - see get_saved_prediction below.
+    activity.predicted_total_duration_sec = result["total_mean_min"] * 60.0
+    activity.predicted_result_json = json.dumps(result)
+    db.commit()
+
+    return result
+
+
+@router.get("/activities/{activity_id}/predicted-result")
+def get_saved_prediction(activity_id: str, db: Session = Depends(get_db)):
+    """Most recently saved prediction result for this activity, or null if none yet."""
+    activity = db.query(models.Activity).filter(models.Activity.activity_id == activity_id).first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    if not activity.predicted_result_json:
+        return None
+
+    return json.loads(activity.predicted_result_json)

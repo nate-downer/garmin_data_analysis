@@ -14,7 +14,7 @@ from .locomotion_model import SEGMENT_TYPES, EFFORT_SEGMENT_TYPES, _tod_harmonic
 VARIABLE_LABELS = {
     "effort_factor": "Effort factor (distance + elevation)",
     "load_ratio": "Load ratio (pack/body weight)",
-    "terrain_factor": "Terrain factor",
+    "terrain_factor_nontechnical": "Terrain factor",
     "cum_distance_prior_mi": "Cumulative distance so far",
     "cum_elevation_prior_ft": "Cumulative elevation so far",
     "tod_modifier": "Time of day",
@@ -73,19 +73,30 @@ def _fit_summary_stats(predicted_vs_actual: list) -> dict:
     }
 
 
-def _variance_explained(term_vars: dict) -> list:
+def _variance_explained(term_vars: dict, term_coefs: dict) -> list:
+    """
+    `term_coefs` holds each term's own posterior samples (its regression
+    coefficient for plain covariates; a representative effect-size proxy for
+    composite terms like tod_modifier/activity_offset/effort_factor) - reported
+    alongside variance-explained so the two can be plotted side by side on a
+    shared category axis.
+    """
     total_var = sum(term_vars.values())
     total_var = np.where(total_var < 1e-12, 1e-12, total_var)
 
     rows = []
     for name, v in term_vars.items():
         share = v / total_var
+        coef = term_coefs[name]
         rows.append({
             "variable": name,
             "label": VARIABLE_LABELS.get(name, name),
             "median_pct": float(np.median(share) * 100),
             "low_pct": float(np.percentile(share, 5) * 100),
             "high_pct": float(np.percentile(share, 95) * 100),
+            "coefficient_median": float(np.median(coef)),
+            "coefficient_low": float(np.percentile(coef, 5)),
+            "coefficient_high": float(np.percentile(coef, 95)),
         })
     return rows
 
@@ -113,6 +124,10 @@ def pooled_diagnostics(fit_result: dict) -> dict:
     tod_a2 = _flatten(posterior["tod_a2"])
     tod_b2 = _flatten(posterior["tod_b2"])
     activity_offset = _flatten(posterior["activity_offset"])  # (S, n_activities)
+    sigma_activity = _flatten(posterior["sigma_activity"])  # (S,)
+    # Non-negative amplitude of the 2-harmonic wave - there's no single signed
+    # slope for a composite sinusoid, so this stands in as its "coefficient".
+    tod_amplitude = np.sqrt(tod_a1 ** 2 + tod_b1 ** 2 + tod_a2 ** 2 + tod_b2 ** 2)  # (S,)
 
     log_effort_std = fit_result["log_effort_stats"].transform(df["log_effort"].to_numpy())
     sin1, cos1, sin2, cos2 = _tod_harmonics(df["hour_of_day"].to_numpy())
@@ -143,6 +158,10 @@ def pooled_diagnostics(fit_result: dict) -> dict:
             "tod_modifier": tod_term.var(axis=1),
             "activity_offset": activity_term.var(axis=1),
         }
+        term_coefs = {
+            "tod_modifier": tod_amplitude,
+            "activity_offset": sigma_activity,
+        }
 
         # technical_climb/technical_descent have no effort term at all - their
         # duration comes entirely from the elevation_change_tech_*/
@@ -151,11 +170,21 @@ def pooled_diagnostics(fit_result: dict) -> dict:
             beta_t = beta_type_all[:, EFFORT_SEGMENT_TYPES.index(type_name)]  # (S,)
             effort_term = beta_t[:, None] * log_effort_std[None, mask]  # (S, n_t)
             term_vars["effort_factor"] = effort_term.var(axis=1)
+            term_coefs["effort_factor"] = beta_t
         else:
             effort_term = 0.0
 
         for j in range(n_cov):
+            # Covariate is a global, shared column, but many entries (climb
+            # difficulty, elevation_change_tech_*, pitch_count_tech_climb,
+            # terrain_factor_nontechnical) are zero-gated to only one or a few
+            # segment types. Skip it entirely for types where it never varies -
+            # it contributes nothing to explaining variance there, and showing
+            # it anyway just clutters every type's panel with irrelevant rows.
+            if covariate_matrix[mask, j].std() < 1e-9:
+                continue
             term_vars[used_covariates[j]] = cov_terms[:, :, j].var(axis=1)
+            term_coefs[used_covariates[j]] = gamma[:, j]
 
         mu = alpha_t[:, None] + effort_term + cov_terms.sum(axis=2) + tod_term + activity_term
         predicted_min = np.exp(np.median(mu, axis=0)) / 60.0
@@ -176,7 +205,7 @@ def pooled_diagnostics(fit_result: dict) -> dict:
         out[type_name] = {
             "label": TYPE_LABELS[type_name],
             "n_segments": int(mask.sum()),
-            "variance_explained": _variance_explained(term_vars),
+            "variance_explained": _variance_explained(term_vars, term_coefs),
             "predicted_vs_actual": predicted_vs_actual,
             **_fit_summary_stats(predicted_vs_actual),
         }
@@ -205,6 +234,10 @@ def rest_diagnostics(fit_result: dict) -> dict:
         "total_distance_mi": distance_term.var(axis=1),
         "total_elevation_gain_ft": elevation_term.var(axis=1),
     }
+    term_coefs = {
+        "total_distance_mi": beta_distance,
+        "total_elevation_gain_ft": beta_elevation,
+    }
 
     mu = alpha[:, None] + distance_term + elevation_term
 
@@ -213,6 +246,7 @@ def rest_diagnostics(fit_result: dict) -> dict:
         cov_terms = gamma[:, None, :] * covariate_matrix[None, :, :]  # (S, n, n_cov)
         for j, cov in enumerate(used_covariates):
             term_vars[cov] = cov_terms[:, :, j].var(axis=1)
+            term_coefs[cov] = gamma[:, j]
         mu = mu + cov_terms.sum(axis=2)
     predicted_min = np.median(mu, axis=0)
     actual_min = df["total_rest_min"].to_numpy()
@@ -233,7 +267,7 @@ def rest_diagnostics(fit_result: dict) -> dict:
         "rest": {
             "label": TYPE_LABELS["rest"],
             "n_segments": int(len(df)),
-            "variance_explained": _variance_explained(term_vars),
+            "variance_explained": _variance_explained(term_vars, term_coefs),
             "predicted_vs_actual": predicted_vs_actual,
             **_fit_summary_stats(predicted_vs_actual),
         }

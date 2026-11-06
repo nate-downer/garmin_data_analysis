@@ -9,7 +9,7 @@ interface UseActivitiesResult {
   activities: Activity[];
   loading: boolean;
   error: string | null;
-  refetch: () => Promise<void>;
+  refetch: (silent?: boolean) => Promise<void>;
 }
 
 export function useActivities(): UseActivitiesResult {
@@ -17,9 +17,12 @@ export function useActivities(): UseActivitiesResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchActivities = async () => {
+  // `silent` skips the loading toggle - used after background saves (e.g. a
+  // Predict Time run) so the list doesn't unmount/remount mid-refresh and wipe
+  // whatever's currently expanded (open accordion panel, in-progress form, etc.).
+  const fetchActivities = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const data = await activitiesAPI.list();
       setActivities(data);
@@ -27,7 +30,7 @@ export function useActivities(): UseActivitiesResult {
       setError(err instanceof Error ? err.message : 'Failed to fetch activities');
       console.error('Error fetching activities:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 

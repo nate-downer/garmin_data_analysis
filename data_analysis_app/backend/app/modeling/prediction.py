@@ -186,6 +186,7 @@ def _sun_times_minutes_since_midnight(
 def predict_route(
     db, activity_id: str, run_id: str, start_time: pd.Timestamp,
     body_weight_lbs: float, pack_weight_lbs: float, party_size: float,
+    experience_level: str,
     n_draws: int = 2000,
 ) -> dict:
     """
@@ -196,9 +197,10 @@ def predict_route(
     own relative segment ordering plus the running sum of *predicted* durations so
     far, not from whatever absolute timestamp happens to be stored.
 
-    `body_weight_lbs`/`pack_weight_lbs`/`party_size` are likewise request-scoped
-    overrides (not read from the activity's own stored metadata) so the user can
-    try different combinations without round-tripping through Activity Details.
+    `body_weight_lbs`/`pack_weight_lbs`/`party_size`/`experience_level` are likewise
+    request-scoped overrides (not read from the activity's own stored metadata) so
+    the user can try different combinations without round-tripping through Activity
+    Details.
     """
     if body_weight_lbs <= 0:
         raise ValueError("Body weight must be greater than 0.")
@@ -231,6 +233,12 @@ def predict_route(
 
     loco_df["load_ratio"] = pack_weight_lbs / body_weight_lbs
     loco_df["party_size"] = party_size
+    # Request-scoped experience_level override, same convention as load_ratio/
+    # party_size above - recompute the dummy columns from the override instead of
+    # the activity's own stored value (same encoding as extract_all_segments).
+    loco_df["exp_new_route_new_skills"] = 1.0 if experience_level == "New Route + New Skills" else 0.0
+    loco_df["exp_somewhat_familiar_route"] = 1.0 if experience_level == "Somewhat Familiar Route" else 0.0
+    loco_df["exp_familiar_route"] = 1.0 if experience_level == "Familiar Route" else 0.0
 
     missing = loco_df[REQUIRED_RAW_FIELDS].isna().any()
     if missing.any():
@@ -303,7 +311,7 @@ def predict_route(
             "distance_mi": float(row["distance_mi"]),
             "elevation_gain_ft": float(row["elevation_gain_ft"]),
             "load_ratio": float(row["load_ratio"]),
-            "terrain_factor": float(row["terrain_factor"]),
+            "terrain_factor_nontechnical": float(row["terrain_factor_nontechnical"]),
             "cum_distance_prior_mi": cum_distance_mean,
             "cum_elevation_prior_ft": cum_elevation_mean,
             "hour_of_day": hypothetical_time.hour + hypothetical_time.minute / 60.0,

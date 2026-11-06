@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Activity, TERRAIN_FACTORS, EXPERIENCE_LEVELS } from '../../types'
+import { Activity, TERRAIN_FACTORS, EXPERIENCE_LEVELS, ACTIVITY_TYPES } from '../../types'
 import { activitiesAPI } from '../../services/api'
+import { formatActivityType } from '../../utils/formatters'
 
 interface ActivityMetadataFormProps {
   activity: Activity
@@ -10,6 +11,7 @@ interface ActivityMetadataFormProps {
 
 function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: ActivityMetadataFormProps) {
   const [activityName, setActivityName] = useState(activity.activity_name || '')
+  const [activityType, setActivityType] = useState(activity.activity_type || 'mountaineering')
   const [bodyWeight, setBodyWeight] = useState(activity.body_weight_lbs || '')
   const [weightCarried, setWeightCarried] = useState(activity.weight_carried_lbs || '')
   const [terrainFactor, setTerrainFactor] = useState(activity.terrain_factor || 1.1)
@@ -58,8 +60,8 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
 
       await activitiesAPI.update(activity.activity_id, {
         activity_name: activityName || undefined,
+        activity_type: activityType,
         terrain_factor: terrainFactor,
-        experience_level: experienceLevel,
         notes: notes || undefined,
         ...(activity.is_planned
           ? (startTimeLocal ? { start_time_local: startTimeLocal } : {})
@@ -67,6 +69,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
               body_weight_lbs: bodyWeight ? Number(bodyWeight) : undefined,
               weight_carried_lbs: weightCarried ? Number(weightCarried) : undefined,
               party_size: partySize ? Number(partySize) : undefined,
+              experience_level: experienceLevel,
             }),
       })
 
@@ -136,6 +139,26 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
             className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
             placeholder="Enter activity name..."
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Activity Type
+          </label>
+          <select
+            value={activityType}
+            onChange={(e) => setActivityType(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+          >
+            {ACTIVITY_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {formatActivityType(type)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Used by the time-prediction model - fix this if the auto-detected default doesn't match what this activity actually was.
+          </p>
         </div>
 
         {/* Body Weight and Pack Weight - side by side (not for planned routes - set per-prediction in the Predict Time panel instead) */}
@@ -213,25 +236,28 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
           )}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Experience Level
-          </label>
-          <select
-            value={experienceLevel}
-            onChange={(e) => setExperienceLevel(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
-          >
-            {EXPERIENCE_LEVELS.map((level) => (
-              <option key={level} value={level}>
-                {level}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">
-            How familiar you are with this route and the skills it requires - used by the time-prediction model.
-          </p>
-        </div>
+        {/* Experience Level - not for planned routes, set per-prediction in the Predict Time panel instead */}
+        {!activity.is_planned && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Experience Level
+            </label>
+            <select
+              value={experienceLevel}
+              onChange={(e) => setExperienceLevel(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500"
+            >
+              {EXPERIENCE_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              How familiar you are with this route and the skills it requires - used by the time-prediction model.
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">

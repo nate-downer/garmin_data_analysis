@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, startTransition, useMemo, memo } from 'react'
 import { Activity, Point, UserSegment, TERRAIN_FACTORS, CLIMB_DIFFICULTIES, PredictionResult } from '../../types'
-import { pointsAPI, segmentsAPI, userSegmentsAPI } from '../../services/api'
+import { pointsAPI, segmentsAPI, userSegmentsAPI, predictionsAPI } from '../../services/api'
 import ActivityMap from '../map/ActivityMap'
 import ElevationChart from '../charts/ElevationChart'
 import SpeedChart from '../charts/SpeedChart'
@@ -898,6 +898,18 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   const [removing, setRemoving] = useState(false)
   const [activePanel, setActivePanel] = useState<'metadata' | 'waypoints' | 'segments' | 'predict' | null>('metadata')
   const [predictionResult, setPredictionResult] = useState<PredictionResult | null>(null)
+
+  // Load the most recently saved prediction (if any) so the distributions/charts
+  // are already there when the user opens this activity, without needing to
+  // click "Predict Time" again.
+  useEffect(() => {
+    predictionsAPI.getSaved(activity.activity_id).then((saved) => {
+      if (saved) {
+        setPredictionResult((current) => (current === null ? saved : current))
+      }
+    }).catch((err) => console.error('Failed to load saved prediction:', err))
+  }, [activity.activity_id])
+
   const sunriseMin = predictionResult?.sunrise_time_of_day_min ?? null
   const sunsetMin = predictionResult?.sunset_time_of_day_min ?? null
   const summitOutsideAfternoonPct = useMemo(
@@ -1909,7 +1921,7 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
               isOpen={activePanel === 'predict'}
               onToggle={() => setActivePanel(activePanel === 'predict' ? null : 'predict')}
             >
-              <PredictTimePanel activity={activity} result={predictionResult} onResultChange={setPredictionResult} />
+              <PredictTimePanel activity={activity} result={predictionResult} onResultChange={setPredictionResult} onActivityUpdated={onActivityUpdated} />
             </AccordionSection>
           </div>
         </div>

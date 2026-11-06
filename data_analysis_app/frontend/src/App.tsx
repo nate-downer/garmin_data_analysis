@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import AnalysisPage from './pages/AnalysisPage'
 import ModelDiagnosticsPage from './pages/ModelDiagnosticsPage'
 import PlanRoutesPage from './pages/PlanRoutesPage'
+import LandingPage from './pages/LandingPage'
 
 function App() {
   useEffect(() => {
@@ -21,7 +22,8 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen">
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/app" element={<HomePage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/build-model" element={<ModelDiagnosticsPage />} />
           <Route path="/plan-routes" element={<PlanRoutesPage />} />

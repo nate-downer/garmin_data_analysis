@@ -25,6 +25,14 @@ class Activity(Base):
     total_distance_mi = Column(Float)
     total_elevation_gain_ft = Column(Float)
     total_elevation_loss_ft = Column(Float)
+    # Most recent Predict Time result's total duration, for planned routes - lets the
+    # list view show a projected time instead of the imported GPX trace's own
+    # (irrelevant) recorded duration.
+    predicted_total_duration_sec = Column(Float)
+    # Full most-recent prediction result (segments, distributions, cumulative
+    # points, etc.) as JSON, so it can be restored without re-running the
+    # prediction - see app/api/predictions.py.
+    predicted_result_json = Column(Text)
 
     # User metadata
     body_weight_lbs = Column(Float)  # User's body weight for metabolic calculations

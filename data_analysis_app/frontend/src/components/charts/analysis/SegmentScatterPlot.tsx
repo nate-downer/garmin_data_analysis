@@ -46,10 +46,6 @@ interface SegmentScatterPlotProps {
   xFormatter?: (value: number) => string;
   yFormatter?: (value: number) => string;
   curveType?: 'saturation' | 'decay'; // Default: saturation (diminishing returns)
-  asymptoteMultiplier?: number; // Controls asymptote height (default 5)
-  slopeMultiplier?: number; // Controls initial slope (default 0.1)
-  minAsymptoteMultiplier?: number; // Min asymptote bound (default 1.5)
-  regularizationStrength?: number; // Regularization strength (default 0.001)
   showTrendline?: boolean; // Whether to show trendline (default true)
 }
 
@@ -62,10 +58,6 @@ function SegmentScatterPlot({
   xFormatter,
   yFormatter,
   curveType = 'saturation',
-  asymptoteMultiplier = 5,
-  slopeMultiplier = 0.1,
-  minAsymptoteMultiplier = 1.5,
-  regularizationStrength = 0.001,
   showTrendline = true,
 }: SegmentScatterPlotProps) {
   // Transform data to scatter plot format
@@ -99,19 +91,15 @@ function SegmentScatterPlot({
       technicalFit = technicalData.length >= 2 ? fitExponentialDecay(technicalData) : null;
       nonTechnicalFit = nonTechnicalData.length >= 2 ? fitExponentialDecay(nonTechnicalData) : null;
     } else {
-      technicalFit = technicalData.length >= 2
-        ? fitExponentialSaturation(technicalData, asymptoteMultiplier, slopeMultiplier, minAsymptoteMultiplier, regularizationStrength)
-        : null;
-      nonTechnicalFit = nonTechnicalData.length >= 2
-        ? fitExponentialSaturation(nonTechnicalData, asymptoteMultiplier, slopeMultiplier, minAsymptoteMultiplier, regularizationStrength)
-        : null;
+      technicalFit = technicalData.length >= 2 ? fitExponentialSaturation(technicalData) : null;
+      nonTechnicalFit = nonTechnicalData.length >= 2 ? fitExponentialSaturation(nonTechnicalData) : null;
     }
 
     return {
       technicalTrendline: technicalFit,
       nonTechnicalTrendline: nonTechnicalFit,
     };
-  }, [chartData, curveType, asymptoteMultiplier, slopeMultiplier, minAsymptoteMultiplier, regularizationStrength, showTrendline]);
+  }, [chartData, curveType, showTrendline]);
 
   if (chartData.length === 0) {
     return (

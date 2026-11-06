@@ -18,6 +18,13 @@ ClimbDifficulty = Literal[
     "5th Hard",
 ]
 
+# The 3 values the modeling pipeline actually distinguishes (is_hiking/is_running
+# dummies, relative to "mountaineering" as the baseline - see modeling/data.py).
+# Restricted only on the write path (ActivityUpdate) - the read path
+# (ActivityBase/Activity) stays a plain str since historical rows were populated
+# straight from each GPX file's own track-type tag and could carry other values.
+ActivityType = Literal["hiking", "running", "mountaineering"]
+
 
 # Activity schemas
 class ActivityBase(BaseModel):
@@ -42,6 +49,7 @@ class ActivityCreate(ActivityBase):
 
 class ActivityUpdate(BaseModel):
     activity_name: Optional[str] = None
+    activity_type: Optional[ActivityType] = None
     body_weight_lbs: Optional[float] = None
     weight_carried_lbs: Optional[float] = None
     terrain_factor: Optional[float] = None
@@ -49,6 +57,7 @@ class ActivityUpdate(BaseModel):
     notes: Optional[str] = None
     is_planned: Optional[bool] = None
     experience_level: Optional[ExperienceLevel] = None
+    predicted_total_duration_sec: Optional[float] = None
     # Only settable for planned routes - shifts every point/segment time by the same delta
     start_time_local: Optional[datetime] = None
 
@@ -64,6 +73,7 @@ class Activity(ActivityBase):
     total_distance_mi: Optional[float] = None
     total_elevation_gain_ft: Optional[float] = None
     total_elevation_loss_ft: Optional[float] = None
+    predicted_total_duration_sec: Optional[float] = None
     is_planned: bool = False
     created_at: datetime
     updated_at: datetime

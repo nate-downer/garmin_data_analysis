@@ -10,6 +10,15 @@ import ModelRunsTable from '../components/analysis/ModelRunsTable';
 import { useModelFitting } from '../hooks/useModelFitting';
 import { MODEL_GROUP_ORDER } from '../types';
 
+// Matches the segment-type color convention used elsewhere in the app (e.g.
+// ActivityEditor.tsx's getSegmentColors(), PredictionCumulativeChart.tsx).
+const colorForGroup = (key: string): string => {
+  if (key.includes('climb')) return '#ea580c'; // orange
+  if (key.includes('descent')) return '#2563eb'; // blue
+  if (key === 'rest') return '#16a34a'; // green
+  return '#6b7280'; // flat - grey
+};
+
 function ModelDiagnosticsPage() {
   const {
     fitStatus,
@@ -170,7 +179,7 @@ function ModelDiagnosticsPage() {
                       </div>
                       <div className="bg-white rounded-lg shadow-md p-6">
                         <h4 className="text-sm font-semibold mb-4 text-gray-700">Predicted vs. Actual</h4>
-                        <PredictedVsActualChart data={group.predicted_vs_actual} />
+                        <PredictedVsActualChart data={group.predicted_vs_actual} color={colorForGroup(key)} />
                       </div>
                     </div>
                   </div>

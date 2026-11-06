@@ -38,20 +38,24 @@ function ActivityListItem({ activity, isSelected, onClick, onActivityUpdated, on
           {/* Activity info */}
           <div className="flex-1">
             <div className="flex items-center space-x-3 flex-wrap">
-              <div className="text-sm text-gray-500">
-                {activity.start_time_local
-                  ? new Date(activity.start_time_local).toLocaleString([], {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      timeZoneName: 'short'
-                    })
-                  : formatDate(activity.date)
-                }
-              </div>
-              <div className="h-4 w-px bg-gray-300"></div>
+              {!activity.is_planned && (
+                <>
+                  <div className="text-sm text-gray-500">
+                    {activity.start_time_local
+                      ? new Date(activity.start_time_local).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          timeZoneName: 'short'
+                        })
+                      : formatDate(activity.date)
+                    }
+                  </div>
+                  <div className="h-4 w-px bg-gray-300"></div>
+                </>
+              )}
               <div className="text-lg font-semibold text-gray-900">
                 {activity.activity_name || activity.activity_id}
               </div>
@@ -68,9 +72,11 @@ function ActivityListItem({ activity, isSelected, onClick, onActivityUpdated, on
             {/* Stats row */}
             <div className="mt-3 flex space-x-6 text-sm flex-wrap">
               <div>
-                <span className="text-gray-500">Time:</span>{' '}
+                <span className="text-gray-500">{activity.is_planned ? 'Projected Time:' : 'Time:'}</span>{' '}
                 <span className="font-medium text-gray-900">
-                  {formatDuration(activity.total_duration_sec)}
+                  {activity.is_planned
+                    ? formatDuration(activity.predicted_total_duration_sec)
+                    : formatDuration(activity.total_duration_sec)}
                 </span>
               </div>
               <div>

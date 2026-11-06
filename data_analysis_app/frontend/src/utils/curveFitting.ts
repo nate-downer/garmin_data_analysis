@@ -1,24 +1,33 @@
 /**
- * Curve fitting utilities for trend lines
+ * Curve fitting utilities for trend lines.
+ *
+ * Both fitters below use the same strategy: grid-search the one parameter the
+ * model is nonlinear in, and solve for the remaining parameter(s) via closed-form
+ * least squares at each grid point (the model is linear in those, for any fixed
+ * value of the nonlinear one). This guarantees the global optimum over the grid -
+ * no local minima, no hand-tuned learning rate/iteration count, and critically, no
+ * floor/regularization bias pulling the result away from what the data actually
+ * supports. Same idea as the backend's `calibrate_effort_curve` (grid-search the
+ * curve exponent, closed-form OLS for the linear part).
  */
+
+function logSpace(min: number, max: number, count: number): number[] {
+  const logMin = Math.log(min);
+  const logMax = Math.log(max);
+  const step = (logMax - logMin) / (count - 1);
+  const values = [];
+  for (let i = 0; i < count; i++) {
+    values.push(Math.exp(logMin + i * step));
+  }
+  return values;
+}
 
 /**
  * Fit an exponential saturation curve (diminishing returns)
  * Model: y = C * (1 - e^(-k*x)), k > 0
  * Passes through origin (0,0) and approaches asymptote C
- *
- * @param asymptoteMultiplier - Controls initial C guess (default 5). Lower for plots with lower asymptotes
- * @param slopeMultiplier - Controls initial k guess (default 0.1). Higher for steeper initial slopes
- * @param minAsymptoteMultiplier - Minimum allowed C as multiple of yMax (default 1.5). Lower for looser bounds
- * @param regularizationStrength - How strongly to push C up (default 0.001). Lower for looser fits
  */
-export function fitExponentialSaturation(
-  data: Array<{ x: number; y: number }>,
-  asymptoteMultiplier: number = 5,
-  slopeMultiplier: number = 0.1,
-  minAsymptoteMultiplier: number = 1.5,
-  regularizationStrength: number = 0.001
-) {
+export function fitExponentialSaturation(data: Array<{ x: number; y: number }>) {
   if (data.length < 2) {
     return null;
   }
@@ -32,89 +41,73 @@ export function fitExponentialSaturation(
     return null;
   }
 
-  // Initial parameter estimates
   const xValues = validData.map(d => d.x);
   const yValues = validData.map(d => d.y);
-
-  const xMin = Math.min(...xValues);
   const xMax = Math.max(...xValues);
-  const yMax = Math.max(...yValues);
 
-  // Initial guesses - use provided multipliers for different plot types
-  let C = yMax * asymptoteMultiplier; // asymptote height
-  let k = slopeMultiplier / xMax; // initial slope steepness
-
-  // Adaptive gradient descent with regularization
-  let learningRate = 0.05;
-  const iterations = 5000;
-  let prevError = Infinity;
-
-  // Regularization weights to push towards desired characteristics
-  const lambdaC = regularizationStrength; // penalty for low C (encourages high asymptote)
-  const lambdaK = 0.01;  // penalty for high k (encourages gentle curve)
-
-  for (let iter = 0; iter < iterations; iter++) {
-    let gradC = 0;
-    let gradK = 0;
-    let totalError = 0;
-
-    for (const point of validData) {
-      const expTerm = Math.exp(-k * point.x);
-      const predicted = C * (1 - expTerm);
-      const error = predicted - point.y;
-
-      gradC += error * (1 - expTerm);
-      gradK += error * C * point.x * expTerm;
-      totalError += error * error;
-    }
-
-    const n = validData.length;
-
-    // Add regularization gradients
-    // Penalize low C (subtract from gradient to push C higher)
-    gradC -= lambdaC * (yMax * 3 - C);
-    // Penalize high k (add to gradient to push k lower)
-    gradK += lambdaK * k;
-
-    // Adaptive learning rate
-    if (totalError < prevError) {
-      learningRate *= 1.05;
-    } else {
-      learningRate *= 0.5;
-    }
-    learningRate = Math.min(Math.max(learningRate, 0.0001), 0.3);
-    prevError = totalError;
-
-    C -= (learningRate * gradC) / n;
-    k -= (learningRate * gradK) / n;
-
-    // Bounds: favor high C and low k (configurable via parameters)
-    C = Math.max(yMax * minAsymptoteMultiplier, Math.min(C, yMax * 20));
-    k = Math.max(0.00001, Math.min(k, 3.0 / xMax)); // slightly relaxed k limit
+  if (xMax <= 0) {
+    return null;
   }
 
-  // Calculate R² properly
+  // For a fixed k, y = C * basis(x) is linear in C - solve it exactly via OLS
+  // rather than tracking it through gradient descent.
+  const solveForC = (k: number) => {
+    let sumBasisSq = 0;
+    let sumBasisY = 0;
+    for (const point of validData) {
+      const basis = 1 - Math.exp(-k * point.x);
+      sumBasisSq += basis * basis;
+      sumBasisY += basis * point.y;
+    }
+    if (sumBasisSq < 1e-12) {
+      return null;
+    }
+    const C = sumBasisY / sumBasisSq;
+    let sse = 0;
+    for (const point of validData) {
+      const basis = 1 - Math.exp(-k * point.x);
+      const residual = C * basis - point.y;
+      sse += residual * residual;
+    }
+    return { C, sse };
+  };
+
+  // Wide grid: from a very gentle near-linear approach to a very steep one that
+  // saturates almost immediately, relative to the data's own x-range.
+  const searchGrid = (kMin: number, kMax: number, count: number) => {
+    let best: { k: number; C: number; sse: number } | null = null;
+    for (const k of logSpace(kMin, kMax, count)) {
+      const result = solveForC(k);
+      if (result && isFinite(result.sse) && (!best || result.sse < best.sse)) {
+        best = { k, C: result.C, sse: result.sse };
+      }
+    }
+    return best;
+  };
+
+  const coarse = searchGrid(0.001 / xMax, 100 / xMax, 400);
+  if (!coarse) {
+    return null;
+  }
+
+  // Finer grid centered on the coarse optimum for extra precision.
+  const fine = searchGrid(coarse.k / 5, coarse.k * 5, 300);
+  const best = fine && fine.sse < coarse.sse ? fine : coarse;
+
+  const { C, k } = best;
+
+  // Calculate R²
   const yMean = yValues.reduce((sum, y) => sum + y, 0) / yValues.length;
   let ssTotal = 0;
-  let ssResidual = 0;
-
   for (const point of validData) {
-    const predicted = C * (1 - Math.exp(-k * point.x));
     ssTotal += Math.pow(point.y - yMean, 2);
-    ssResidual += Math.pow(point.y - predicted, 2);
   }
-
-  // Protect against division by zero or negative R²
-  let rSquared = 0;
-  if (ssTotal > 0) {
-    rSquared = Math.max(0, 1 - (ssResidual / ssTotal));
-  }
+  const rSquared = ssTotal > 0 ? Math.max(0, 1 - best.sse / ssTotal) : 0;
 
   // Generate curve points
   const numPoints = 100;
   const step = xMax / numPoints;
   const curvePoints = [];
-
   for (let i = 0; i <= numPoints; i++) {
     const x = i * step;
     const y = C * (1 - Math.exp(-k * x));
@@ -148,67 +141,80 @@ export function fitExponentialDecay(data: Array<{ x: number; y: number }>) {
     return null;
   }
 
-  // Initial parameter estimates
   const xValues = validData.map(d => d.x);
   const yValues = validData.map(d => d.y);
 
   const xMin = Math.min(...xValues);
   const xMax = Math.max(...xValues);
-  const yMin = Math.min(...yValues);
-  const yMax = Math.max(...yValues);
+  const xRange = xMax - xMin;
 
-  // Initial guesses
-  let a = yMax - yMin;
-  let b = 1 / (xMax - xMin);
-  let c = yMin;
-
-  // Simple gradient descent to optimize parameters
-  const learningRate = 0.01;
-  const iterations = 1000;
-
-  for (let iter = 0; iter < iterations; iter++) {
-    let gradA = 0;
-    let gradB = 0;
-    let gradC = 0;
-
-    for (const point of validData) {
-      const predicted = a * Math.exp(-b * point.x) + c;
-      const error = predicted - point.y;
-
-      gradA += error * Math.exp(-b * point.x);
-      gradB += error * a * (-point.x) * Math.exp(-b * point.x);
-      gradC += error;
-    }
-
-    const n = validData.length;
-    a -= (learningRate * gradA) / n;
-    b -= (learningRate * gradB) / n;
-    c -= (learningRate * gradC) / n;
-
-    // Ensure parameters stay positive
-    a = Math.max(0.001, a);
-    b = Math.max(0.001, b);
-    c = Math.max(0, c);
+  if (xRange <= 0) {
+    return null;
   }
 
-  // Calculate R² (coefficient of determination)
+  const n = validData.length;
+
+  // For a fixed b, y = a*e^(-b*x) + c is linear in (a, c) - solve the 2x2 normal
+  // equations exactly rather than tracking both through gradient descent.
+  const solveForAC = (b: number) => {
+    let sumBasisSq = 0;
+    let sumBasis = 0;
+    let sumBasisY = 0;
+    let sumY = 0;
+    for (const point of validData) {
+      const basis = Math.exp(-b * point.x);
+      sumBasisSq += basis * basis;
+      sumBasis += basis;
+      sumBasisY += basis * point.y;
+      sumY += point.y;
+    }
+    const determinant = sumBasisSq * n - sumBasis * sumBasis;
+    if (Math.abs(determinant) < 1e-12) {
+      return null;
+    }
+    const a = (sumBasisY * n - sumBasis * sumY) / determinant;
+    const c = (sumBasisSq * sumY - sumBasis * sumBasisY) / determinant;
+    let sse = 0;
+    for (const point of validData) {
+      const residual = a * Math.exp(-b * point.x) + c - point.y;
+      sse += residual * residual;
+    }
+    return { a, c, sse };
+  };
+
+  const searchGrid = (bMin: number, bMax: number, count: number) => {
+    let best: { b: number; a: number; c: number; sse: number } | null = null;
+    for (const b of logSpace(bMin, bMax, count)) {
+      const result = solveForAC(b);
+      if (result && isFinite(result.sse) && (!best || result.sse < best.sse)) {
+        best = { b, a: result.a, c: result.c, sse: result.sse };
+      }
+    }
+    return best;
+  };
+
+  const coarse = searchGrid(0.001 / xRange, 100 / xRange, 400);
+  if (!coarse) {
+    return null;
+  }
+
+  const fine = searchGrid(coarse.b / 5, coarse.b * 5, 300);
+  const best = fine && fine.sse < coarse.sse ? fine : coarse;
+
+  const { a, b, c } = best;
+
+  // Calculate R²
   const yMean = yValues.reduce((sum, y) => sum + y, 0) / yValues.length;
   let ssTotal = 0;
-  let ssResidual = 0;
-
   for (const point of validData) {
-    const predicted = a * Math.exp(-b * point.x) + c;
     ssTotal += Math.pow(point.y - yMean, 2);
-    ssResidual += Math.pow(point.y - predicted, 2);
   }
-
-  const rSquared = 1 - (ssResidual / ssTotal);
+  const rSquared = ssTotal > 0 ? Math.max(0, 1 - best.sse / ssTotal) : 0;
 
   // Generate curve points
   const numPoints = 100;
-  const step = (xMax - xMin) / numPoints;
+  const step = xRange / numPoints;
   const curvePoints = [];
-
   for (let i = 0; i <= numPoints; i++) {
     const x = xMin + i * step;
     const y = a * Math.exp(-b * x) + c;
