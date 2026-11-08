@@ -283,7 +283,7 @@ For the rest time model, I would also like to add a factor that represents the %
 - [x] Improve the plots in the models evalutation seciton and add colors
 - [x] Make the analysis seciton better (with best fit curves that don't suck)
 - [x] Add a landing page (with explination of the project)
-- [ ] Fix bug that stops segments from loading right away after generation
+- [x] Fix bug that stops segments from loading right away after generation
 
 
 ## Milestone 1.0 - Host App 
@@ -295,6 +295,58 @@ Ok there is going to be a lot to cover with this one. A few main topics off the 
 - Hosting: Where? How? How much?
 - Deployment: What will deploying updates to the public site look like? will I need to have dev adn staging versions? what will the structure for all of that be?
 
+Breaking this out:
+
+### Viewer Mode:
+
+In this mode, I would like people to be able to see all the data but not edit anything. They should not be able to press any buttons that would write data to the back end or cause models to run.
+
+In this mode, I would like there to be a banner at the top of the page remnding users "You are in Viewer Mode, some funcitonality is disabled". If the user ever clicks on a button that would write or update data, they should get a notification that says, "This feature is disabled in Viewer mode"
+
+Here's how this should work on key pages:
+- Edit Actvities: User can open activities, move through the accordian, and select particular segments, but cannot edit metadata, update points, edit segments, or run new time predictions.
+- View Analysis: this is all fine to view as it
+- Run models: users can selecte different historical modesl to view, but cannont run a new model.
+- Plan Activities: same as edit activities.
+- Add Activity: this button will still open up the widow for uploading, but the save activity button should be disables.
+
+Note that in the near future I will want to move to a three level architecture:
+- Viewer Mode - Can view public data but nothing else
+- Client Mode - Individual users can view and edit their data but nothing else
+- Admin Mode - Admin can view and edit everything and run models
+
+We are not going to implement this right now, but please set up the tennancy structure with this in mind. I don't want to have to un-do and re-do too much work in this area.
+
+As a part of this, I want activities to be flagged as public or private, within the metadata tab. Activities should be public by default, but can be set to private if the user chooses.
+
+### Log-In
+
+Relatedly I want to have to log in to access the admin account. I want the admin account to be linked to an email adress of mine with a password set up.
+
+In the near future I would like to be able to invite other people to set up accounts, but we will get there in a later update.
+
+### Hosting
+
+I am happy with the plan as layed out in data_analysis_app/project_files/hosting_plan.md if we can keep the cost under $10/ month that would be excellent
+
+### Deployment
+
+I am not super familier with how these types of production deployment piplines work, so simpler would be better for me. If it is possible to have both a local "test" version and a public version that updates when I push code to a certain place that would be excellent. Please write a new "deployment process" md file so that I have a resource documenting how that process should work for me for the future.
+
+NOTE: Instead of using the garmin-data-analysis repo for the public version of the app, I think I will want to start a clean repo called generative-outdoor-activity-tracker (without all the scratch files and test work) and use that for the public version. I will do this transition myself after we make the 1.0 updates but before we configure and deploy the public version.
+
+
+### UAC:
+
+- [ ] The bones of a 3 layer tennancy structure are established.
+- [ ] The Viewer and Admin layers are implemented
+- [ ] The admin access is password protected
+- [ ] The app is configured such that it can be hosted publicly
+- [ ] Documentation on the new deployment pipeline is created
+- [ ] The app's code is migrated to a new repo called generative-outdoor-activity-tracker (user will do this manually)
+
+
+--------------------------------------------------------------------------------------
 
 
 ## Future Work:
