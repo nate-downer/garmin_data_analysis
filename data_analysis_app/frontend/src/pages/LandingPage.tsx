@@ -80,12 +80,10 @@ function LandingPage() {
             </div>
 
             <div className="flex space-x-4">
-              <button className="btn-primary" onClick={() => navigate('/analysis')}>
-                View Activity Analysis
+              <button className="btn-primary" onClick={() => navigate('/plan-routes')}>
+                Explore the App
               </button>
-              {/* Both buttons share one destination for now - there's no view/admin
-                  distinction to encode until the auth work in hosting_plan.md exists. */}
-              <button className="btn-nav" onClick={() => navigate('/analysis')}>
+              <button className="btn-nav" onClick={() => navigate('/login')}>
                 Admin Login
               </button>
             </div>

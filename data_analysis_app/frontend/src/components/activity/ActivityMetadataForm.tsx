@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Activity, TERRAIN_FACTORS, EXPERIENCE_LEVELS, ACTIVITY_TYPES } from '../../types'
 import { activitiesAPI } from '../../services/api'
 import { formatActivityType } from '../../utils/formatters'
+import { useAuth } from '../../context/AuthContext'
 
 interface ActivityMetadataFormProps {
   activity: Activity
@@ -10,6 +11,7 @@ interface ActivityMetadataFormProps {
 }
 
 function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: ActivityMetadataFormProps) {
+  const { isAdmin } = useAuth()
   const [activityName, setActivityName] = useState(activity.activity_name || '')
   const [activityType, setActivityType] = useState(activity.activity_type || 'mountaineering')
   const [bodyWeight, setBodyWeight] = useState(activity.body_weight_lbs || '')
@@ -18,6 +20,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
   const [experienceLevel, setExperienceLevel] = useState(activity.experience_level || 'New Route - Familiar Skills')
   const [partySize, setPartySize] = useState(activity.party_size || '')
   const [notes, setNotes] = useState(activity.notes || '')
+  const [isPublic, setIsPublic] = useState(activity.is_public)
   const [startTimeLocal, setStartTimeLocal] = useState(activity.start_time_local ? activity.start_time_local.slice(0, 16) : '')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -27,6 +30,11 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
     if (e) {
       e.preventDefault()
       e.stopPropagation()
+    }
+
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
     }
 
     const label = activity.activity_name || activity.activity_id
@@ -54,6 +62,11 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
       e.stopPropagation()
     }
 
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     try {
       setSaving(true)
       setMessage(null)
@@ -63,6 +76,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
         activity_type: activityType,
         terrain_factor: terrainFactor,
         notes: notes || undefined,
+        is_public: isPublic,
         ...(activity.is_planned
           ? (startTimeLocal ? { start_time_local: startTimeLocal } : {})
           : {
@@ -90,6 +104,37 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
 
   return (
     <div className="space-y-4">
+      {/* Public/Private - at the top since it governs who can see this activity at all.
+          Hidden entirely in Viewer mode, not just disabled - a viewer has no business
+          knowing this control exists at all. */}
+      {isAdmin && (
+        <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+          <div>
+            <span className="block text-sm font-medium text-gray-700">
+              {isPublic ? 'Public' : 'Private'}
+            </span>
+            <span className="text-xs text-gray-500">
+              {isPublic ? 'Visible to anyone viewing the site' : 'Hidden from view-only visitors'}
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isPublic}
+            onClick={() => setIsPublic(!isPublic)}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 ${
+              isPublic ? 'bg-accent-600' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                isPublic ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      )}
+
       {/* Start Time / Timezone - editable start time for planned routes, read-only for recorded ones */}
       {activity.is_planned ? (
         <div className="pb-4 border-b border-gray-200">
@@ -279,7 +324,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
           type="button"
           onClick={handleSave}
           disabled={saving || deleting}
-          className="flex-1 btn-primary disabled:opacity-50"
+          className={`flex-1 btn-primary disabled:opacity-50 ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           {saving ? 'Saving...' : 'Save Metadata'}
         </button>
@@ -287,7 +332,7 @@ function ActivityMetadataForm({ activity, onActivityUpdated, onDeleted }: Activi
           type="button"
           onClick={handleDelete}
           disabled={saving || deleting}
-          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className={`flex-1 px-4 py-2 bg-red-600 text-white rounded-md font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           {deleting ? 'Deleting...' : 'Delete Activity'}
         </button>

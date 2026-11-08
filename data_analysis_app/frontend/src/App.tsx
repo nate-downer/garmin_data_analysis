@@ -5,6 +5,8 @@ import AnalysisPage from './pages/AnalysisPage'
 import ModelDiagnosticsPage from './pages/ModelDiagnosticsPage'
 import PlanRoutesPage from './pages/PlanRoutesPage'
 import LandingPage from './pages/LandingPage'
+import LoginPage from './pages/LoginPage'
+import { AuthProvider } from './context/AuthContext'
 
 function App() {
   useEffect(() => {
@@ -20,15 +22,18 @@ function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/app" element={<HomePage />} />
-          <Route path="/analysis" element={<AnalysisPage />} />
-          <Route path="/build-model" element={<ModelDiagnosticsPage />} />
-          <Route path="/plan-routes" element={<PlanRoutesPage />} />
-        </Routes>
-      </div>
+      <AuthProvider>
+        <div className="min-h-screen">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/app" element={<HomePage />} />
+            <Route path="/analysis" element={<AnalysisPage />} />
+            <Route path="/build-model" element={<ModelDiagnosticsPage />} />
+            <Route path="/plan-routes" element={<PlanRoutesPage />} />
+          </Routes>
+        </div>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

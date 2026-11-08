@@ -338,13 +338,29 @@ NOTE: Instead of using the garmin-data-analysis repo for the public version of t
 
 ### UAC:
 
-- [ ] The bones of a 3 layer tennancy structure are established.
-- [ ] The Viewer and Admin layers are implemented
-- [ ] The admin access is password protected
-- [ ] The app is configured such that it can be hosted publicly
-- [ ] Documentation on the new deployment pipeline is created
+- [x] The bones of a 3 layer tennancy structure are established.
+- [x] The Viewer and Admin layers are implemented
+- [x] The admin access is password protected
+- [x] The app is configured such that it can be hosted publicly
+- [x] Documentation on the new deployment pipeline is created
 - [ ] The app's code is migrated to a new repo called generative-outdoor-activity-tracker (user will do this manually)
 
+
+### Aditional UI Updates
+
+- [ ] Better user / logout UI at the top of the window
+- [ ] Better / more consistent rejection mesages when in the vwier mode
+
+
+## Milestone 1.1 - Multiple client level users
+
+Big things to think about:
+
+- How multiple predictions for the same plan for differnt people are structured.
+- Introducing models can can be fine tuned to an individual (based on priors from a global model)
+- How public data will work (to start it should just Nate's data in the viewr version)
+- Data sharing agreement so that we have permission to use people's data
+- Setting up new accounts (I think this should be invite only to start)
 
 --------------------------------------------------------------------------------------
 

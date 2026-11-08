@@ -3,38 +3,43 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from .. import models, schemas
+from ..auth import get_current_user_optional, get_visible_activity, is_admin_user, require_admin
 from ..database import get_db
 
 router = APIRouter()
 
 
 @router.get("/activities", response_model=List[schemas.Activity])
-def list_activities(db: Session = Depends(get_db)):
+def list_activities(
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """List all activities with summary stats."""
-    activities = db.query(models.Activity).order_by(models.Activity.date.desc()).all()
+    query = db.query(models.Activity)
+    if not is_admin_user(current_user):
+        query = query.filter(models.Activity.is_public == True)
+    activities = query.order_by(models.Activity.date.desc()).all()
     return activities
 
 
 @router.get("/activities/{activity_id}", response_model=schemas.Activity)
-def get_activity(activity_id: str, db: Session = Depends(get_db)):
+def get_activity(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """Get single activity details."""
-    activity = db.query(models.Activity).filter(
-        models.Activity.activity_id == activity_id
-    ).first()
-
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    return activity
+    return get_visible_activity(activity_id, db, current_user)
 
 
 @router.patch("/activities/{activity_id}", response_model=schemas.Activity)
 def update_activity(
     activity_id: str,
     activity_update: schemas.ActivityUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """Update activity metadata (weight, party size, notes)."""
     activity = db.query(models.Activity).filter(
@@ -83,7 +88,11 @@ def update_activity(
 
 
 @router.delete("/activities/{activity_id}")
-def delete_activity(activity_id: str, db: Session = Depends(get_db)):
+def delete_activity(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
     """Delete activity and all related data."""
     activity = db.query(models.Activity).filter(
         models.Activity.activity_id == activity_id
@@ -99,23 +108,33 @@ def delete_activity(activity_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/activities/stats/summary", response_model=schemas.SummaryStats)
-def get_summary_stats(db: Session = Depends(get_db)):
+def get_summary_stats(
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """Get summary stats for homepage."""
+    base_query = db.query(models.Activity)
+    if not is_admin_user(current_user):
+        base_query = base_query.filter(models.Activity.is_public == True)
+    visible_ids = base_query.with_entities(models.Activity.id)
+
     # Total activities
-    total_activities = db.query(func.count(models.Activity.id)).scalar()
+    total_activities = db.query(func.count(models.Activity.id)).filter(
+        models.Activity.id.in_(visible_ids)
+    ).scalar()
 
     # Total distance
     total_distance = db.query(
         func.sum(models.Activity.total_distance_mi)
-    ).scalar() or 0
+    ).filter(models.Activity.id.in_(visible_ids)).scalar() or 0
 
     # Total elevation gain
     total_elevation_gain = db.query(
         func.sum(models.Activity.total_elevation_gain_ft)
-    ).scalar() or 0
+    ).filter(models.Activity.id.in_(visible_ids)).scalar() or 0
 
     # Days since last activity
-    latest_activity = db.query(models.Activity).order_by(
+    latest_activity = base_query.order_by(
         models.Activity.date.desc()
     ).first()
 

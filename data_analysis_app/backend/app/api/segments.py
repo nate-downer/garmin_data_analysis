@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 import math
 from .. import models, schemas
+from ..auth import get_current_user_optional, get_visible_activity, is_admin_user, require_admin
 from ..database import get_db
 from ..services.calculations import calculate_segments, aggregate_activity_stats, calculate_segment_metrics
 from app.services.calculations import calculate_pandolf_energy
@@ -61,7 +62,8 @@ def calculate_segment_energy(user_segment: models.UserSegment, activity: models.
 @router.get("/user-segments", response_model=List[schemas.UserSegmentWithActivity])
 def get_all_user_segments(
     segment_type: Optional[str] = Query(None, description="Filter by type: climb, descent, flat, rest"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
 ):
     """
     Get all user segments across completed (non-planned) activities, with enriched data.
@@ -82,6 +84,9 @@ def get_all_user_segments(
     query = db.query(models.UserSegment, models.Activity).join(
         models.Activity, models.UserSegment.activity_id == models.Activity.activity_id
     ).filter(models.Activity.is_planned == False)
+
+    if not is_admin_user(current_user):
+        query = query.filter(models.Activity.is_public == True)
 
     # Filter by segment type if provided
     if segment_type:
@@ -143,15 +148,13 @@ def get_all_user_segments(
 
 
 @router.get("/activities/{activity_id}/segments", response_model=List[schemas.Segment])
-def get_activity_segments(activity_id: str, db: Session = Depends(get_db)):
+def get_activity_segments(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """Get calculated segments for an activity."""
-    # Verify activity exists
-    activity = db.query(models.Activity).filter(
-        models.Activity.activity_id == activity_id
-    ).first()
-
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    get_visible_activity(activity_id, db, current_user)
 
     # Get segments
     segments = db.query(models.Segment).filter(
@@ -162,7 +165,11 @@ def get_activity_segments(activity_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/activities/{activity_id}/segments/recalculate")
-def recalculate_segments(activity_id: str, db: Session = Depends(get_db)):
+def recalculate_segments(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
     """
     Recalculate segments after point edits.
 
@@ -247,15 +254,13 @@ def recalculate_segments(activity_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/activities/{activity_id}/user-segments", response_model=List[schemas.UserSegment])
-def get_user_segments(activity_id: str, db: Session = Depends(get_db)):
+def get_user_segments(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """Get user-defined segments for an activity."""
-    # Verify activity exists
-    activity = db.query(models.Activity).filter(
-        models.Activity.activity_id == activity_id
-    ).first()
-
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    get_visible_activity(activity_id, db, current_user)
 
     # Get user segments
     user_segments = db.query(models.UserSegment).filter(
@@ -269,7 +274,8 @@ def get_user_segments(activity_id: str, db: Session = Depends(get_db)):
 def create_user_segment(
     activity_id: str,
     segment: schemas.UserSegmentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """Create a new user-defined segment."""
     # Verify activity exists
@@ -343,7 +349,8 @@ def create_user_segment(
 def update_user_segment(
     segment_id: int,
     segment_update: schemas.UserSegmentUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """Update a user-defined segment."""
     user_segment = db.query(models.UserSegment).filter(
@@ -403,7 +410,11 @@ def update_user_segment(
 
 
 @router.delete("/user-segments/{segment_id}")
-def delete_user_segment(segment_id: int, db: Session = Depends(get_db)):
+def delete_user_segment(
+    segment_id: int,
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
+):
     """Delete a user-defined segment."""
     user_segment = db.query(models.UserSegment).filter(
         models.UserSegment.id == segment_id
@@ -467,7 +478,8 @@ def auto_detect_segment_type(points: List[models.Point], start_time: datetime, e
 def generate_segments(
     activity_id: str,
     force: bool = Query(False, description="Delete existing user segments before generating"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """
     Auto-generate segments using 3-step algorithm:
@@ -692,7 +704,8 @@ def generate_segments(
 @router.post("/activities/{activity_id}/user-segments/repair-adjacency")
 def repair_segment_adjacency(
     activity_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """
     Detect and repair broken adjacency between segments.
@@ -754,7 +767,8 @@ def repair_segment_adjacency(
 def split_segment(
     segment_id: int,
     request: schemas.SplitSegmentRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """
     Split a user segment into two segments at the specified time.
@@ -838,7 +852,8 @@ def split_segment(
 @router.post("/user-segments/{segment_id}/merge-with-next", response_model=schemas.UserSegment)
 def merge_with_next(
     segment_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """
     Merge current segment with the next segment.
@@ -906,7 +921,8 @@ def merge_with_next(
 @router.post("/user-segments/{segment_id}/merge-with-previous", response_model=schemas.UserSegment)
 def merge_with_previous(
     segment_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """
     Merge current segment with the previous segment.
@@ -975,7 +991,8 @@ def merge_with_previous(
 def adjust_boundary(
     segment_id: int,
     request: schemas.AdjustBoundaryRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """
     Adjust the start or end boundary of a segment.

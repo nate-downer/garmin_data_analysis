@@ -5,6 +5,7 @@ from datetime import datetime
 import tempfile
 import os
 from .. import models, schemas
+from ..auth import require_admin
 from ..database import get_db
 from ..services.gpx_parser import parse_gpx_file
 from ..services.calculations import calculate_segments, aggregate_activity_stats
@@ -17,7 +18,8 @@ router = APIRouter()
 async def upload_gpx(
     file: UploadFile = File(...),
     is_planned: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Upload and process GPX file.
@@ -87,7 +89,8 @@ async def upload_gpx(
             total_distance_mi=stats['total_distance_mi'],
             total_elevation_gain_ft=stats['total_elevation_gain_ft'],
             total_elevation_loss_ft=stats['total_elevation_loss_ft'],
-            is_planned=is_planned
+            is_planned=is_planned,
+            owner_id=current_user.id
         )
 
         db.add(activity)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { gpxAPI, userSegmentsAPI } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
 
 interface UploadActivityModalProps {
   isOpen: boolean
@@ -9,6 +10,7 @@ interface UploadActivityModalProps {
 }
 
 function UploadActivityModal({ isOpen, onClose, onSuccess, defaultIsPlanned = false }: UploadActivityModalProps) {
+  const { isAdmin } = useAuth()
   const [file, setFile] = useState<File | null>(null)
   const [isPlanned, setIsPlanned] = useState(defaultIsPlanned)
   const [uploading, setUploading] = useState(false)
@@ -35,6 +37,11 @@ function UploadActivityModal({ isOpen, onClose, onSuccess, defaultIsPlanned = fa
   }
 
   const handleUpload = async () => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     if (!file) {
       setError('Please select a file')
       return
@@ -170,7 +177,7 @@ function UploadActivityModal({ isOpen, onClose, onSuccess, defaultIsPlanned = fa
             <button
               onClick={handleUpload}
               disabled={uploading || !file}
-              className="flex-1 btn-primary disabled:opacity-50"
+              className={`flex-1 btn-primary disabled:opacity-50 ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {uploading ? 'Uploading...' : 'Upload'}
             </button>

@@ -7,6 +7,20 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
+class User(Base):
+    """An account that can log in - today just the single admin; `role` leaves
+    room for a future "client" tier without a schema change."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    # Nullable until Phase 2's login setup sets a real password - lets this table
+    # exist a phase ahead of the login endpoint without a second migration.
+    password_hash = Column(String)
+    role = Column(String, nullable=False, default="admin")  # "admin" | "client"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Activity(Base):
     """Activity metadata and aggregate statistics."""
     __tablename__ = "activities"
@@ -43,6 +57,12 @@ class Activity(Base):
     is_planned = Column(Boolean, default=False, nullable=False)
     # Route/skill familiarity - shared covariate in the pooled locomotion duration model
     experience_level = Column(String, nullable=False, default="New Route - Familiar Skills")
+
+    # Tenancy foundation (Milestone 1.0 phase 1). Nullable: SQLite can't add a NOT
+    # NULL column without a default to a populated table, and there's no "current
+    # user" to stamp new activities with until Phase 2's login/session exists.
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    is_public = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

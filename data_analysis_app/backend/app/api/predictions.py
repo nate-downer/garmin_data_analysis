@@ -2,6 +2,7 @@
 fitted historical model run.
 """
 import json
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 import pandas as pd
 
 from .. import models
+from ..auth import get_current_user_optional, get_visible_activity
 from ..database import get_db
 from ..modeling.prediction import predict_route
 from ..schemas import ExperienceLevel
@@ -28,11 +30,14 @@ class PredictionRequest(BaseModel):
 
 
 @router.post("/activities/{activity_id}/predict")
-def predict_activity_time(activity_id: str, request: PredictionRequest, db: Session = Depends(get_db)):
+def predict_activity_time(
+    activity_id: str,
+    request: PredictionRequest,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """Predict per-segment and total trip time for a planned route's segments."""
-    activity = db.query(models.Activity).filter(models.Activity.activity_id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    activity = get_visible_activity(activity_id, db, current_user)
 
     try:
         start_time = pd.Timestamp(request.start_time)
@@ -52,20 +57,26 @@ def predict_activity_time(activity_id: str, request: PredictionRequest, db: Sess
 
     # Persist the latest estimate (full result + the cheap summary field the
     # activity list reads) so it survives a page reload and can be restored
-    # without re-running the prediction - see get_saved_prediction below.
-    activity.predicted_total_duration_sec = result["total_mean_min"] * 60.0
-    activity.predicted_result_json = json.dumps(result)
-    db.commit()
+    # without re-running the prediction - see get_saved_prediction below. Only
+    # when an admin is making the call - /predict itself stays open to anyone
+    # (a live, interactive predict experience for viewers), but an anonymous
+    # visitor's inputs shouldn't be able to overwrite the admin's saved result.
+    if current_user is not None and current_user.role == "admin":
+        activity.predicted_total_duration_sec = result["total_mean_min"] * 60.0
+        activity.predicted_result_json = json.dumps(result)
+        db.commit()
 
     return result
 
 
 @router.get("/activities/{activity_id}/predicted-result")
-def get_saved_prediction(activity_id: str, db: Session = Depends(get_db)):
+def get_saved_prediction(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """Most recently saved prediction result for this activity, or null if none yet."""
-    activity = db.query(models.Activity).filter(models.Activity.activity_id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    activity = get_visible_activity(activity_id, db, current_user)
 
     if not activity.predicted_result_json:
         return None

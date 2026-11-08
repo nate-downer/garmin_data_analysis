@@ -10,6 +10,7 @@ import PredictionDistributionChart from '../charts/analysis/PredictionDistributi
 import PredictionCumulativeChart from '../charts/analysis/PredictionCumulativeChart'
 import PredictionTimeOfDayChart from '../charts/analysis/PredictionTimeOfDayChart'
 import { formatDistance } from '../../utils/formatters'
+import { useAuth } from '../../context/AuthContext'
 
 // Predict Time plots: shared time-of-day window logic for summit/finish coloring + subtitles
 const AFTERNOON_START_MIN = 12 * 60
@@ -195,6 +196,7 @@ const SegmentEditor = memo(({
   isInAdjustStartMode?: boolean
   isInAdjustEndMode?: boolean
 }) => {
+  const { isAdmin } = useAuth()
   const [terrainType, setTerrainType] = useState<'rest' | 'non-technical' | 'technical'>(
     editingSegment
       ? editingSegment.segment_type === 'rest'
@@ -342,7 +344,7 @@ const SegmentEditor = memo(({
               difficulty: difficulty || undefined,
               pitchCount: pitchCount > 0 ? pitchCount : undefined
             })}
-            className="w-full px-4 py-2 bg-accent-600 text-white rounded-md font-medium hover:bg-accent-700 text-sm"
+            className={`w-full px-4 py-2 bg-accent-600 text-white rounded-md font-medium hover:bg-accent-700 text-sm ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Save
           </button>
@@ -355,7 +357,7 @@ const SegmentEditor = memo(({
                 difficulty: difficulty || undefined,
                 pitchCount: pitchCount > 0 ? pitchCount : undefined
               })}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 text-sm"
+              className={`w-full px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 text-sm ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               Save and Continue
             </button>
@@ -372,7 +374,7 @@ const SegmentEditor = memo(({
                 isInSplitMode
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
                   : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-              }`}
+              } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               Split Segment
             </button>
@@ -384,7 +386,7 @@ const SegmentEditor = memo(({
               <button
                 onClick={onMergeWithPrior}
                 disabled={isFirstSegment}
-                className="px-3 py-2 bg-gray-200 text-gray-800 rounded-md font-medium hover:bg-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`px-3 py-2 bg-gray-200 text-gray-800 rounded-md font-medium hover:bg-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Merge with Prior
               </button>
@@ -393,7 +395,7 @@ const SegmentEditor = memo(({
               <button
                 onClick={onMergeWithNext}
                 disabled={isLastSegment}
-                className="px-3 py-2 bg-gray-200 text-gray-800 rounded-md font-medium hover:bg-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`px-3 py-2 bg-gray-200 text-gray-800 rounded-md font-medium hover:bg-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Merge with Next
               </button>
@@ -410,7 +412,7 @@ const SegmentEditor = memo(({
                   isInAdjustStartMode
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                }`}
+                } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Adjust Start
               </button>
@@ -423,7 +425,7 @@ const SegmentEditor = memo(({
                   isInAdjustEndMode
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                }`}
+                } ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Adjust End
               </button>
@@ -616,6 +618,7 @@ const ViewSegments = memo(({
   onRepairAdjacency: () => void
   repairingAdjacency: boolean
 }) => {
+  const { isAdmin } = useAuth()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [showTopFade, setShowTopFade] = useState(false)
   const [showBottomFade, setShowBottomFade] = useState(true)
@@ -737,7 +740,7 @@ const ViewSegments = memo(({
           <button
             onClick={onGenerateSegments}
             disabled={generatingSegments}
-            className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className={`flex-1 px-4 py-2 bg-gray-600 text-white rounded-md font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {generatingSegments ? (
               <>
@@ -756,7 +759,7 @@ const ViewSegments = memo(({
             <button
               onClick={onRepairAdjacency}
               disabled={repairingAdjacency}
-              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className={`flex-1 px-4 py-2 bg-gray-600 text-white rounded-md font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {repairingAdjacency ? (
                 <>
@@ -795,6 +798,7 @@ const EditControls = memo(({
   pointSpeeds: number[]
   onApplyMaxSpeed: (threshold: number) => void
 }) => {
+  const { isAdmin } = useAuth()
   const [sliderSpeed, setSliderSpeed] = useState<number>(20)
   const [maxSpeed, setMaxSpeed] = useState<number>(20)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -856,7 +860,7 @@ const EditControls = memo(({
           <button
             onClick={onRemoveSelectedPoints}
             disabled={removing}
-            className="w-full px-4 py-2 bg-primary-700 text-white rounded-md font-medium hover:bg-primary-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full px-4 py-2 bg-primary-700 text-white rounded-md font-medium hover:bg-primary-800 disabled:opacity-50 disabled:cursor-not-allowed ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {removing ? 'Removing...' : `Remove ${selectedPointIndices.length} Point${selectedPointIndices.length > 1 ? 's' : ''}`}
           </button>
@@ -875,7 +879,7 @@ const EditControls = memo(({
       <button
         onClick={onRestoreAll}
         disabled={removing}
-        className="w-full px-4 py-2 bg-gray-400 text-white rounded-md font-medium hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`w-full px-4 py-2 bg-gray-400 text-white rounded-md font-medium hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         {removing ? 'Restoring...' : 'Restore Original Waypoints'}
       </button>
@@ -890,6 +894,7 @@ interface ActivityEditorProps {
 }
 
 function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEditorProps) {
+  const { isAdmin } = useAuth()
   const [points, setPoints] = useState<Point[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1052,6 +1057,11 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   const handleRemoveSelectedPoints = async () => {
     if (selectedPointIndices.length === 0) return
 
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     try {
       setRemoving(true)
 
@@ -1091,6 +1101,11 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   }
 
   const handleRestoreAll = async () => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     if (!confirm('Restore all removed waypoints? This will undo all your edits.')) {
       return
     }
@@ -1135,6 +1150,11 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   }
 
   const handleGenerateSegments = async () => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     // Warn if segments exist
     if (userSegments.length > 0) {
       const confirmed = window.confirm(
@@ -1158,6 +1178,11 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   }
 
   const handleRepairAdjacency = async () => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     try {
       setRepairingAdjacency(true)
       const result = await userSegmentsAPI.repairAdjacency(activity.activity_id)
@@ -1176,10 +1201,18 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   }
 
   const handleSplitSegment = (segmentId: number) => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
     setEditingMode({ type: 'split', segmentId })
   }
 
   const handleMergeWithPrior = async (segmentId: number) => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
     try {
       await userSegmentsAPI.mergeWithPrevious(segmentId)
       await fetchUserSegments()
@@ -1192,6 +1225,10 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   }
 
   const handleMergeWithNext = async (segmentId: number) => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
     try {
       await userSegmentsAPI.mergeWithNext(segmentId)
       await fetchUserSegments()
@@ -1204,10 +1241,18 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   }
 
   const handleAdjustStart = (segmentId: number) => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
     setEditingMode({ type: 'adjust-start', segmentId })
   }
 
   const handleAdjustEnd = (segmentId: number) => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
     setEditingMode({ type: 'adjust-end', segmentId })
   }
 
@@ -1288,6 +1333,11 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
     difficulty?: string,
     pitchCount?: number
   }) => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     const { timeRange, terrainType, difficulty, pitchCount } = data
 
     try {
@@ -1365,6 +1415,11 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
     difficulty?: string,
     pitchCount?: number
   }) => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode')
+      return
+    }
+
     const { timeRange, terrainType, difficulty, pitchCount } = data
 
     try {
@@ -1451,8 +1506,11 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
   const handleSelectSegment = async (segmentId: number) => {
     // Clicking a segment enters edit mode for that segment
     if (editingSegmentId === segmentId) {
-      // Save before closing if there are current editing values
-      if (currentEditingValues && segmentTimeRange) {
+      // Save before closing if there are current editing values. isAdmin-gated
+      // silently (no alert) - the user didn't click a save button, so there's
+      // nothing to tell a viewer "no" to; segment browsing/switching itself
+      // stays fully allowed either way.
+      if (isAdmin && currentEditingValues && segmentTimeRange) {
         try {
           // Determine segment_type based on terrain selection
           let segmentType: 'climb' | 'descent' | 'flat' | 'rest'
@@ -1506,8 +1564,9 @@ function ActivityEditor({ activity, onActivityUpdated, onDeleted }: ActivityEdit
       setSelectedSegmentId(null)
       setCurrentEditingValues(null)
     } else {
-      // Save the currently editing segment before switching to a new one
-      if (editingSegmentId && currentEditingValues && segmentTimeRange) {
+      // Save the currently editing segment before switching to a new one.
+      // Same silent isAdmin gate as above - no alert, switching stays allowed.
+      if (isAdmin && editingSegmentId && currentEditingValues && segmentTimeRange) {
         try {
           // Determine segment_type based on terrain selection
           let segmentType: 'climb' | 'descent' | 'flat' | 'rest'

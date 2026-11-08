@@ -24,6 +24,7 @@ export interface Activity {
   notes: string | null;
   is_planned: boolean;
   experience_level: string | null;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +122,7 @@ export interface ActivityUpdate {
   predicted_total_duration_sec?: number;
   // Only settable for planned routes - shifts every point/segment time by the same delta
   start_time_local?: string;
+  is_public?: boolean;
 }
 
 export interface UserSegmentCreate {

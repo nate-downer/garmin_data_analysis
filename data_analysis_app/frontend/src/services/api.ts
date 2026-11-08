@@ -31,6 +31,8 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Required for the signed session cookie (login) to be sent/received at all.
+  withCredentials: true,
 });
 
 // Activities API
@@ -254,6 +256,27 @@ export const predictionsAPI = {
   // every successful predict call), or null if none has been run yet.
   getSaved: async (activityId: string): Promise<PredictionResult | null> => {
     const response = await apiClient.get<PredictionResult | null>(`/activities/${activityId}/predicted-result`);
+    return response.data;
+  },
+};
+
+// Auth (Milestone 1.0 phase 2)
+export interface AuthStatus {
+  authenticated: boolean;
+  email?: string;
+  role?: string;
+}
+
+export const authAPI = {
+  login: async (email: string, password: string): Promise<AuthStatus> => {
+    const response = await apiClient.post('/auth/login', { email, password });
+    return { authenticated: true, ...response.data };
+  },
+  logout: async (): Promise<void> => {
+    await apiClient.post('/auth/logout');
+  },
+  me: async (): Promise<AuthStatus> => {
+    const response = await apiClient.get<AuthStatus>('/auth/me');
     return response.data;
   },
 };

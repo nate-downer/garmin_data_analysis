@@ -9,6 +9,7 @@ import PredictedVsActualChart from '../components/charts/analysis/PredictedVsAct
 import ModelRunsTable from '../components/analysis/ModelRunsTable';
 import { useModelFitting } from '../hooks/useModelFitting';
 import { MODEL_GROUP_ORDER } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 // Matches the segment-type color convention used elsewhere in the app (e.g.
 // ActivityEditor.tsx's getSegmentColors(), PredictionCumulativeChart.tsx).
@@ -20,6 +21,7 @@ const colorForGroup = (key: string): string => {
 };
 
 function ModelDiagnosticsPage() {
+  const { isAdmin } = useAuth();
   const {
     fitStatus,
     runs,
@@ -40,6 +42,10 @@ function ModelDiagnosticsPage() {
     : 0;
 
   const handleFitClick = async () => {
+    if (!isAdmin) {
+      alert('This feature is disabled in Viewer mode');
+      return;
+    }
     setStarting(true);
     try {
       await startFit(limitToRecent ? Number(nRecentActivities) : null);
@@ -63,7 +69,7 @@ function ModelDiagnosticsPage() {
                 </p>
               </div>
               <button
-                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`btn-primary disabled:opacity-50 disabled:cursor-not-allowed ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={handleFitClick}
                 disabled={isRunning}
               >

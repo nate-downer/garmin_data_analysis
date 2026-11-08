@@ -1,11 +1,12 @@
 """Points API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import timedelta
 import math
 import pandas as pd
 from .. import models, schemas
+from ..auth import get_current_user_optional, get_visible_activity, require_admin
 from ..database import get_db
 from ..services.calculations import decimate_points
 
@@ -16,16 +17,11 @@ router = APIRouter()
 def get_activity_points(
     activity_id: str,
     include_removed: bool = Query(False, description="Include removed points"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
 ):
     """Get all points for an activity."""
-    # Verify activity exists
-    activity = db.query(models.Activity).filter(
-        models.Activity.activity_id == activity_id
-    ).first()
-
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    get_visible_activity(activity_id, db, current_user)
 
     # Query points
     query = db.query(models.Point).filter(models.Point.activity_id == activity_id)
@@ -43,16 +39,11 @@ def get_decimated_points(
     activity_id: str,
     max_points: int = Query(1000, ge=100, le=5000, description="Maximum points to return"),
     include_removed: bool = Query(False, description="Include removed points"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
 ):
     """Get downsampled points for efficient rendering."""
-    # Verify activity exists
-    activity = db.query(models.Activity).filter(
-        models.Activity.activity_id == activity_id
-    ).first()
-
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    get_visible_activity(activity_id, db, current_user)
 
     # Query points
     query = db.query(models.Point).filter(models.Point.activity_id == activity_id)
@@ -97,7 +88,8 @@ def get_decimated_points(
 def remove_points(
     activity_id: str,
     request: schemas.RemovePointsRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """Remove points in a time range (soft delete)."""
     # Verify activity exists
@@ -138,7 +130,8 @@ def remove_points(
 def restore_points(
     activity_id: str,
     request: schemas.RestorePointsRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """Restore previously removed points."""
     # Verify activity exists
@@ -198,7 +191,8 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 @router.post("/activities/{activity_id}/points/calculate-inactivity")
 def calculate_inactivity(
     activity_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _admin: models.User = Depends(require_admin),
 ):
     """
     Calculate rolling 3-minute average speed for all points and mark inactive points.

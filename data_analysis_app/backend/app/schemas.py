@@ -37,6 +37,7 @@ class ActivityBase(BaseModel):
     notes: Optional[str] = None
     is_planned: Optional[bool] = None
     experience_level: Optional[ExperienceLevel] = None
+    is_public: Optional[bool] = None
 
 
 class ActivityCreate(ActivityBase):
@@ -60,6 +61,7 @@ class ActivityUpdate(BaseModel):
     predicted_total_duration_sec: Optional[float] = None
     # Only settable for planned routes - shifts every point/segment time by the same delta
     start_time_local: Optional[datetime] = None
+    is_public: Optional[bool] = None
 
 
 class Activity(ActivityBase):
